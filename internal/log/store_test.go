@@ -93,6 +93,61 @@ func TestInsertList(t *testing.T) {
 	}
 }
 
+func TestStoreMigrateDurationMs(t *testing.T) {
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`CREATE TABLE logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        time TIMESTAMP,
+        account_id INTEGER,
+        method TEXT,
+        url TEXT,
+        req_header BLOB,
+        req_body TEXT,
+        resp_header BLOB,
+        resp_body TEXT,
+        status INTEGER,
+        error TEXT
+    )`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`INSERT INTO logs(time, account_id, method, url, req_header, req_body, resp_header, resp_body, status, error) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+		time.Now(), int64(1), "GET", "u", nil, "", nil, "", 200, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := NewStore(db)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	ctx := context.Background()
+	logs, err := s.List(ctx, 10, 0)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 log, got %d", len(logs))
+	}
+	if logs[0].DurationMs != 0 {
+		t.Fatalf("unexpected duration: %d", logs[0].DurationMs)
+	}
+	rl := &RequestLog{Time: time.Now(), AccountID: 2, Method: "POST", URL: "u2", DurationMs: 5}
+	if err := s.Insert(ctx, rl); err != nil {
+		t.Fatalf("Insert: %v", err)
+	}
+	logs, err = s.List(ctx, 10, 0)
+	if err != nil {
+		t.Fatalf("List after insert: %v", err)
+	}
+	if len(logs) != 2 {
+		t.Fatalf("expected 2 logs, got %d", len(logs))
+	}
+}
+
 func TestStoreMigrateReqSize(t *testing.T) {
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
 	db, err := sql.Open("sqlite", dsn)

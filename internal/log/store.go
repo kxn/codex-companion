@@ -58,12 +58,18 @@ func (s *Store) init() error {
        resp_body TEXT,
        resp_size INTEGER NOT NULL DEFAULT 0,
         status INTEGER,
-        duration_ms INTEGER,
+        duration_ms INTEGER NOT NULL DEFAULT 0,
         error TEXT
     )`
 	if _, err := s.db.Exec(query); err != nil {
 		logger.Errorf("create logs table failed: %v", err)
 		return err
+	}
+	if _, err := s.db.Exec(`ALTER TABLE logs ADD COLUMN duration_ms INTEGER NOT NULL DEFAULT 0`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			logger.Errorf("add duration_ms column failed: %v", err)
+			return err
+		}
 	}
 	if _, err := s.db.Exec(`ALTER TABLE logs ADD COLUMN req_size INTEGER NOT NULL DEFAULT 0`); err != nil {
 		if !strings.Contains(err.Error(), "duplicate column name") {
@@ -102,7 +108,7 @@ func (s *Store) Insert(ctx context.Context, rl *RequestLog) error {
 
 // List returns latest logs limited by n with offset.
 func (s *Store) List(ctx context.Context, n, offset int) ([]*RequestLog, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, time, account_id, method, url, req_header, req_body, req_size, resp_header, resp_body, resp_size, status, duration_ms, error FROM logs ORDER BY id DESC LIMIT ? OFFSET ?`, n, offset)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, time, account_id, method, url, req_header, req_body, req_size, resp_header, resp_body, resp_size, status, COALESCE(duration_ms,0), error FROM logs ORDER BY id DESC LIMIT ? OFFSET ?`, n, offset)
 	if err != nil {
 		logger.Errorf("query logs failed: %v", err)
 		return nil, err
