@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -83,6 +85,20 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if account.Type == acct.APIKeyAccount {
 			if account.BaseURL != "" {
 				base = account.BaseURL
+			}
+			if u, err := url.Parse(base); err == nil {
+				segs := strings.Split(strings.Trim(u.Path, "/"), "/")
+				if len(segs) > 0 {
+					last := segs[len(segs)-1]
+					if len(last) > 1 && last[0] == 'v' {
+						if _, err := strconv.Atoi(last[1:]); err == nil {
+							path = strings.TrimPrefix(path, "/v1")
+							if path == "" {
+								path = "/"
+							}
+						}
+					}
+				}
 			}
 			// normalize request body: store true and remove include
 			if len(body) > 0 {
