@@ -65,8 +65,12 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 				return
 			}
 			if err != nil {
-				logger.Errorf("add account failed: %v", err)
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				if errors.Is(err, account.ErrDuplicate) {
+					http.Error(w, err.Error(), http.StatusConflict)
+				} else {
+					logger.Errorf("add account failed: %v", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+				}
 				return
 			}
 			json.NewEncoder(w).Encode(a)

@@ -36,6 +36,9 @@ type Manager struct {
 	db *sql.DB
 }
 
+// ErrDuplicate indicates the account already exists.
+var ErrDuplicate = errors.New("duplicate account")
+
 // NewManager creates a new Manager and ensures the accounts table exists.
 func NewManager(db *sql.DB) (*Manager, error) {
 	m := &Manager{db: db}
@@ -101,12 +104,22 @@ func (m *Manager) List(ctx context.Context) ([]*Account, error) {
 // AddAPIKey adds a new API key account.
 func (m *Manager) AddAPIKey(ctx context.Context, name, key string, priority int) (*Account, error) {
 	logger.Debugf("adding API key account %s priority %d", name, priority)
+	var id int64
+	err := m.db.QueryRowContext(ctx, `SELECT id FROM accounts WHERE api_key=?`, key).Scan(&id)
+	if err == nil {
+		logger.Warnf("duplicate API key account %s", key)
+		return nil, ErrDuplicate
+	} else if err != nil && err != sql.ErrNoRows {
+		logger.Errorf("check duplicate api key failed: %v", err)
+		return nil, err
+	}
+
 	res, err := m.db.ExecContext(ctx, `INSERT INTO accounts(name, type, api_key, priority, exhausted) VALUES(?, ?, ?, ?, 0)`, name, APIKeyAccount, key, priority)
 	if err != nil {
 		logger.Errorf("add API key account failed: %v", err)
 		return nil, err
 	}
-	id, err := res.LastInsertId()
+	id, err = res.LastInsertId()
 	if err != nil {
 		logger.Errorf("get last insert id failed: %v", err)
 		return nil, err
@@ -118,12 +131,22 @@ func (m *Manager) AddAPIKey(ctx context.Context, name, key string, priority int)
 // AddChatGPT adds a new ChatGPT account using refresh token.
 func (m *Manager) AddChatGPT(ctx context.Context, name, refreshToken string, priority int) (*Account, error) {
 	logger.Debugf("adding ChatGPT account %s priority %d", name, priority)
+	var id int64
+	err := m.db.QueryRowContext(ctx, `SELECT id FROM accounts WHERE refresh_token=?`, refreshToken).Scan(&id)
+	if err == nil {
+		logger.Warnf("duplicate ChatGPT account")
+		return nil, ErrDuplicate
+	} else if err != nil && err != sql.ErrNoRows {
+		logger.Errorf("check duplicate chatgpt failed: %v", err)
+		return nil, err
+	}
+
 	res, err := m.db.ExecContext(ctx, `INSERT INTO accounts(name, type, refresh_token, priority, exhausted) VALUES(?, ?, ?, ?, 0)`, name, ChatGPTAccount, refreshToken, priority)
 	if err != nil {
 		logger.Errorf("add ChatGPT account failed: %v", err)
 		return nil, err
 	}
-	id, err := res.LastInsertId()
+	id, err = res.LastInsertId()
 	if err != nil {
 		logger.Errorf("get last insert id failed: %v", err)
 		return nil, err

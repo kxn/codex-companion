@@ -6,6 +6,7 @@
 </head>
 <body>
 <h1>Codex Companion</h1>
+<nav><a href="index.html">Accounts</a> | <a href="logs.html">Logs</a></nav>
 
 <section>
   <h2>Add API Key Account</h2>
@@ -28,12 +29,12 @@
 
 <section>
   <h2>Accounts</h2>
-  <div id="accounts"></div>
-</section>
-
-<section>
-  <h2>Logs</h2>
-  <pre id="logs"></pre>
+  <table id="accounts">
+    <thead>
+      <tr><th>ID</th><th>Type</th><th>Name</th><th>Identifier</th><th>Priority</th><th>Actions</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
 </section>
 
 <script>
@@ -41,33 +42,30 @@ async function loadAccounts() {
   try {
     const res = await fetch('/admin/api/accounts');
     const accounts = await res.json();
-    console.debug('Loaded accounts', accounts);
-    const container = document.getElementById('accounts');
-    container.innerHTML = '';
+    const tbody = document.querySelector('#accounts tbody');
+    tbody.innerHTML = '';
     accounts.forEach(a => {
-      const div = document.createElement('div');
-      div.textContent = `${a.id}: ${a.name} (priority ${a.priority})`;
+      const tr = document.createElement('tr');
+      const type = a.type === 0 ? 'API Key' : 'ChatGPT';
+      const ident = a.type === 0 ? a.api_key : a.refresh_token;
+      tr.innerHTML = `<td>${a.id}</td><td>${type}</td><td>${a.name}</td><td>${ident}</td><td>${a.priority}</td>`;
+      const actions = document.createElement('td');
       const del = document.createElement('button');
       del.textContent = 'Delete';
       del.onclick = async () => {
         const resp = await fetch(`/admin/api/accounts/${a.id}`, {method: 'DELETE'});
         if (!resp.ok) {
-          console.error('Delete failed', resp.status);
+          alert('Delete failed ' + resp.status);
         }
         loadAccounts();
       };
-      div.appendChild(del);
-      container.appendChild(div);
+      actions.appendChild(del);
+      tr.appendChild(actions);
+      tbody.appendChild(tr);
     });
   } catch (e) {
     console.error('Load accounts error', e);
   }
-}
-
-async function loadLogs() {
-  const res = await fetch('/admin/api/logs');
-  const logs = await res.json();
-  document.getElementById('logs').textContent = JSON.stringify(logs, null, 2);
 }
 
 document.getElementById('apiKeyForm').onsubmit = async (e) => {
@@ -85,7 +83,7 @@ document.getElementById('apiKeyForm').onsubmit = async (e) => {
       })
     });
     if (!resp.ok) {
-      console.error('Add API key account failed', resp.status);
+      alert('Add API key account failed: ' + (await resp.text()));
     }
   } catch (e) {
     console.error('Add API key account error', e);
@@ -109,7 +107,7 @@ document.getElementById('chatgptForm').onsubmit = async (e) => {
       })
     });
     if (!resp.ok) {
-      console.error('Add ChatGPT account failed', resp.status);
+      alert('Add ChatGPT account failed: ' + (await resp.text()));
     }
   } catch (e) {
     console.error('Add ChatGPT account error', e);
@@ -132,7 +130,6 @@ document.getElementById('importBtn').onclick = async () => {
 
 function load() {
   loadAccounts();
-  loadLogs();
 }
 
 load();
