@@ -20,6 +20,7 @@ const (
 // Account represents an upstream Codex account.
 type Account struct {
 	ID             int64       `json:"id"`
+	AccountID      string      `json:"account_id"`
 	Name           string      `json:"name"`
 	Type           AccountType `json:"type"`
 	APIKey         string      `json:"api_key"`
@@ -57,17 +58,22 @@ func (m *Manager) init() error {
         refresh_token TEXT,
         access_token TEXT,
         token_expires_at TIMESTAMP,
+        account_id TEXT,
         priority INTEGER,
         exhausted BOOLEAN,
         reset_at TIMESTAMP
     )`
-	_, err := m.db.Exec(query)
-	return err
+	if _, err := m.db.Exec(query); err != nil {
+		return err
+	}
+	// Add new column for existing tables; ignore error if already exists.
+	m.db.Exec(`ALTER TABLE accounts ADD COLUMN account_id TEXT`)
+	return nil
 }
 
 // List returns all accounts ordered by priority.
 func (m *Manager) List(ctx context.Context) ([]*Account, error) {
-	rows, err := m.db.QueryContext(ctx, `SELECT id, name, type, api_key, refresh_token, access_token, token_expires_at, priority, exhausted, reset_at FROM accounts ORDER BY priority`)
+	rows, err := m.db.QueryContext(ctx, `SELECT id, account_id, name, type, api_key, refresh_token, access_token, token_expires_at, priority, exhausted, reset_at FROM accounts ORDER BY priority`)
 	if err != nil {
 		return nil, err
 	}
@@ -75,10 +81,10 @@ func (m *Manager) List(ctx context.Context) ([]*Account, error) {
 	var res []*Account
 	for rows.Next() {
 		var a Account
-		var apiKey, refreshToken, accessToken sql.NullString
+		var apiKey, refreshToken, accessToken, accountID sql.NullString
 		var tokenExpiresAt sql.NullTime
 		var resetAt sql.NullTime
-		if err := rows.Scan(&a.ID, &a.Name, &a.Type, &apiKey, &refreshToken, &accessToken, &tokenExpiresAt, &a.Priority, &a.Exhausted, &resetAt); err != nil {
+		if err := rows.Scan(&a.ID, &accountID, &a.Name, &a.Type, &apiKey, &refreshToken, &accessToken, &tokenExpiresAt, &a.Priority, &a.Exhausted, &resetAt); err != nil {
 			return nil, err
 		}
 		if apiKey.Valid {
@@ -89,6 +95,9 @@ func (m *Manager) List(ctx context.Context) ([]*Account, error) {
 		}
 		if accessToken.Valid {
 			a.AccessToken = accessToken.String
+		}
+		if accountID.Valid {
+			a.AccountID = accountID.String
 		}
 		if tokenExpiresAt.Valid {
 			a.TokenExpiresAt = tokenExpiresAt.Time
@@ -129,7 +138,7 @@ func (m *Manager) AddAPIKey(ctx context.Context, name, key string, priority int)
 }
 
 // AddChatGPT adds a new ChatGPT account using refresh token.
-func (m *Manager) AddChatGPT(ctx context.Context, name, refreshToken string, priority int) (*Account, error) {
+func (m *Manager) AddChatGPT(ctx context.Context, name, refreshToken, accountID string, priority int) (*Account, error) {
 	logger.Debugf("adding ChatGPT account %s priority %d", name, priority)
 	var id int64
 	err := m.db.QueryRowContext(ctx, `SELECT id FROM accounts WHERE refresh_token=?`, refreshToken).Scan(&id)
@@ -141,7 +150,7 @@ func (m *Manager) AddChatGPT(ctx context.Context, name, refreshToken string, pri
 		return nil, err
 	}
 
-	res, err := m.db.ExecContext(ctx, `INSERT INTO accounts(name, type, refresh_token, priority, exhausted) VALUES(?, ?, ?, ?, 0)`, name, ChatGPTAccount, refreshToken, priority)
+	res, err := m.db.ExecContext(ctx, `INSERT INTO accounts(name, type, refresh_token, account_id, priority, exhausted) VALUES(?, ?, ?, ?, ?, 0)`, name, ChatGPTAccount, refreshToken, accountID, priority)
 	if err != nil {
 		logger.Errorf("add ChatGPT account failed: %v", err)
 		return nil, err
@@ -152,13 +161,13 @@ func (m *Manager) AddChatGPT(ctx context.Context, name, refreshToken string, pri
 		return nil, err
 	}
 	logger.Infof("added ChatGPT account %d", id)
-	return &Account{ID: id, Name: name, Type: ChatGPTAccount, RefreshToken: refreshToken, Priority: priority}, nil
+	return &Account{ID: id, Name: name, Type: ChatGPTAccount, RefreshToken: refreshToken, AccountID: accountID, Priority: priority}, nil
 }
 
 // Update updates an existing account.
 func (m *Manager) Update(ctx context.Context, a *Account) error {
-	_, err := m.db.ExecContext(ctx, `UPDATE accounts SET name=?, type=?, api_key=?, refresh_token=?, access_token=?, token_expires_at=?, priority=?, exhausted=?, reset_at=? WHERE id=?`,
-		a.Name, a.Type, a.APIKey, a.RefreshToken, a.AccessToken, a.TokenExpiresAt, a.Priority, a.Exhausted, a.ResetAt, a.ID)
+	_, err := m.db.ExecContext(ctx, `UPDATE accounts SET name=?, type=?, api_key=?, refresh_token=?, access_token=?, token_expires_at=?, account_id=?, priority=?, exhausted=?, reset_at=? WHERE id=?`,
+		a.Name, a.Type, a.APIKey, a.RefreshToken, a.AccessToken, a.TokenExpiresAt, a.AccountID, a.Priority, a.Exhausted, a.ResetAt, a.ID)
 	return err
 }
 
@@ -188,12 +197,12 @@ func (m *Manager) Reactivate(ctx context.Context, id int64) error {
 
 // Get retrieves account by id.
 func (m *Manager) Get(ctx context.Context, id int64) (*Account, error) {
-	row := m.db.QueryRowContext(ctx, `SELECT id, name, type, api_key, refresh_token, access_token, token_expires_at, priority, exhausted, reset_at FROM accounts WHERE id=?`, id)
+	row := m.db.QueryRowContext(ctx, `SELECT id, account_id, name, type, api_key, refresh_token, access_token, token_expires_at, priority, exhausted, reset_at FROM accounts WHERE id=?`, id)
 	var a Account
-	var apiKey, refreshToken, accessToken sql.NullString
+	var apiKey, refreshToken, accessToken, accountID sql.NullString
 	var tokenExpiresAt sql.NullTime
 	var resetAt sql.NullTime
-	if err := row.Scan(&a.ID, &a.Name, &a.Type, &apiKey, &refreshToken, &accessToken, &tokenExpiresAt, &a.Priority, &a.Exhausted, &resetAt); err != nil {
+	if err := row.Scan(&a.ID, &accountID, &a.Name, &a.Type, &apiKey, &refreshToken, &accessToken, &tokenExpiresAt, &a.Priority, &a.Exhausted, &resetAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
@@ -207,6 +216,9 @@ func (m *Manager) Get(ctx context.Context, id int64) (*Account, error) {
 	}
 	if accessToken.Valid {
 		a.AccessToken = accessToken.String
+	}
+	if accountID.Valid {
+		a.AccountID = accountID.String
 	}
 	if tokenExpiresAt.Valid {
 		a.TokenExpiresAt = tokenExpiresAt.Time

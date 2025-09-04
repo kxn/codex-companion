@@ -31,7 +31,7 @@
   <h2>Accounts</h2>
   <table id="accounts">
     <thead>
-      <tr><th>ID</th><th>Type</th><th>Name</th><th>Identifier</th><th>Priority</th><th>Actions</th></tr>
+      <tr><th>ID</th><th>Type</th><th>Name</th><th>API Key</th><th>Refresh Token</th><th>Access Token</th><th>Priority</th><th>Actions</th></tr>
     </thead>
     <tbody></tbody>
   </table>
@@ -44,11 +44,12 @@ async function loadAccounts() {
     const accounts = await res.json();
     const tbody = document.querySelector('#accounts tbody');
     tbody.innerHTML = '';
+    const shorten = s => s ? (s.length > 10 ? s.slice(0,10) + '...' : s) : '';
     accounts.forEach(a => {
       const tr = document.createElement('tr');
       const type = a.type === 0 ? 'API Key' : 'ChatGPT';
-      const ident = a.type === 0 ? a.api_key : a.refresh_token;
-      tr.innerHTML = `<td>${a.id}</td><td>${type}</td><td>${a.name}</td><td>${ident}</td><td>${a.priority}</td>`;
+      const id = a.account_id || a.id;
+      tr.innerHTML = `<td>${id}</td><td>${type}</td><td>${a.name}</td><td>${shorten(a.api_key)}</td><td>${shorten(a.refresh_token)}</td><td>${shorten(a.access_token)}</td><td>${a.priority}</td>`;
       const actions = document.createElement('td');
       const del = document.createElement('button');
       del.textContent = 'Delete';
