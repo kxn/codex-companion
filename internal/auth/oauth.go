@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"codex-companion/internal/account"
+	"codex-companion/internal/logger"
 )
 
 const tokenURL = "https://auth.openai.com/oauth/token"
@@ -33,19 +34,23 @@ func ExchangeRefreshToken(ctx context.Context, rt string) (string, string, time.
 	buf, _ := json.Marshal(payload)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, bytes.NewReader(buf))
 	if err != nil {
+		logger.Errorf("new token request: %v", err)
 		return "", "", 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		logger.Errorf("token request failed: %v", err)
 		return "", "", 0, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		logger.Errorf("token request unexpected status: %s", resp.Status)
 		return "", "", 0, fmt.Errorf("unexpected status: %s", resp.Status)
 	}
 	var tr tokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
+		logger.Errorf("decode token response: %v", err)
 		return "", "", 0, err
 	}
 	return tr.AccessToken, tr.RefreshToken, time.Duration(tr.ExpiresIn) * time.Second, nil
@@ -61,6 +66,7 @@ func Refresh(ctx context.Context, mgr *account.Manager, a *account.Account) erro
 	}
 	token, rt, expiresIn, err := ExchangeRefreshToken(ctx, a.RefreshToken)
 	if err != nil {
+		logger.Errorf("exchange refresh token failed: %v", err)
 		return err
 	}
 	a.AccessToken = token
