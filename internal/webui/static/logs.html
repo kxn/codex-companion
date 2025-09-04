@@ -42,7 +42,8 @@ async function loadLogs() {
   logs.forEach(l => {
     const tr = document.createElement('tr');
     const time = new Date(l.Time).toLocaleString();
-    tr.innerHTML = `<td>${l.ID}</td><td>${time}</td><td>${l.AccountID}</td><td>${l.Method}</td><td>${l.URL}</td><td>${l.Status}</td><td>${l.Error || ''}</td>`;
+    const acc = l.AccountName || l.AccountID;
+    tr.innerHTML = `<td>${l.ID}</td><td>${time}</td><td>${acc}</td><td>${l.Method}</td><td>${l.URL}</td><td>${l.Status}</td><td>${l.Error || ''}</td>`;
     const td = document.createElement('td');
     const btn = document.createElement('button');
     btn.textContent = 'Details';

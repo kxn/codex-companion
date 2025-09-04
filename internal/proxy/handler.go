@@ -143,30 +143,30 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		start := time.Now()
-		resp, err := h.Client.Do(req)
-		if err != nil {
-			logger.Warnf("upstream error: %v", err)
-			if err := h.Log.Insert(ctx, &log.RequestLog{
-				Time:       time.Now(),
-				AccountID:  account.ID,
-				Method:     r.Method,
-				URL:        r.URL.String(),
-				ReqHeader:  r.Header.Clone(),
-				ReqBody:    string(reqBody),
-				ReqSize:    len(reqBody),
-				RespSize:   0,
-				Status:     0,
-				DurationMs: time.Since(start).Milliseconds(),
-				Error:      err.Error(),
-			}); err != nil {
-				logger.Errorf("insert log failed: %v", err)
-			}
-			if attempts == 2 {
-				http.Error(w, "upstream error", http.StatusBadGateway)
-				return
-			}
-			continue
-		}
+               resp, err := h.Client.Do(req)
+               if err != nil {
+                       logger.Warnf("upstream error: %v", err)
+                       if err := h.Log.Insert(ctx, &log.RequestLog{
+                               Time:       time.Now(),
+                               AccountID:  account.ID,
+                               Method:     r.Method,
+                               URL:        upstreamURL,
+                               ReqHeader:  r.Header.Clone(),
+                               ReqBody:    string(reqBody),
+                               ReqSize:    len(reqBody),
+                               RespSize:   0,
+                               Status:     0,
+                               DurationMs: time.Since(start).Milliseconds(),
+                               Error:      err.Error(),
+                       }); err != nil {
+                               logger.Errorf("insert log failed: %v", err)
+                       }
+                       if attempts == 2 {
+                               http.Error(w, "upstream error", http.StatusBadGateway)
+                               return
+                       }
+                       continue
+               }
 		defer resp.Body.Close()
 		respBody, err := io.ReadAll(resp.Body)
 		if err != nil {
@@ -174,23 +174,28 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		duration := time.Since(start)
 
-		// log
-		if err := h.Log.Insert(ctx, &log.RequestLog{
-			Time:       time.Now(),
-			AccountID:  account.ID,
-			Method:     r.Method,
-			URL:        r.URL.String(),
-			ReqHeader:  r.Header.Clone(),
-			ReqBody:    string(reqBody),
-			ReqSize:    len(reqBody),
-			RespHeader: resp.Header.Clone(),
-			RespBody:   string(respBody),
-			RespSize:   len(respBody),
-			Status:     resp.StatusCode,
-			DurationMs: duration.Milliseconds(),
-		}); err != nil {
-			logger.Errorf("insert log failed: %v", err)
-		}
+               // log
+               logErr := ""
+               if resp.StatusCode >= 400 {
+                       logErr = string(respBody)
+               }
+               if err := h.Log.Insert(ctx, &log.RequestLog{
+                       Time:       time.Now(),
+                       AccountID:  account.ID,
+                       Method:     r.Method,
+                       URL:        upstreamURL,
+                       ReqHeader:  r.Header.Clone(),
+                       ReqBody:    string(reqBody),
+                       ReqSize:    len(reqBody),
+                       RespHeader: resp.Header.Clone(),
+                       RespBody:   string(respBody),
+                       RespSize:   len(respBody),
+                       Status:     resp.StatusCode,
+                       DurationMs: duration.Milliseconds(),
+                       Error:      logErr,
+               }); err != nil {
+                       logger.Errorf("insert log failed: %v", err)
+               }
 
 		logger.Infof("proxied %s via account %d status %d in %dms", r.URL.Path, account.ID, resp.StatusCode, duration.Milliseconds())
 

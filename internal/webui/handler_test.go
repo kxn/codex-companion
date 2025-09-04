@@ -189,24 +189,27 @@ func TestAccountsAPI(t *testing.T) {
 }
 
 func TestLogsAPI(t *testing.T) {
-	_, ls, h := setupWebUI(t)
-	ctx := context.Background()
-	rl := &logpkg.RequestLog{Time: time.Now(), AccountID: 1, Method: "GET", URL: "u"}
-	if err := ls.Insert(ctx, rl); err != nil {
-		t.Fatal(err)
-	}
-	req := httptest.NewRequest(http.MethodGet, "/admin/api/logs", nil)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("logs status: %d", rec.Code)
-	}
-	var res struct {
-		Logs    []logpkg.RequestLog `json:"logs"`
-		Page    int                 `json:"page"`
-		HasMore bool                `json:"has_more"`
-	}
-	if err := json.NewDecoder(rec.Body).Decode(&res); err != nil || len(res.Logs) != 1 || res.Logs[0].Method != "GET" || res.Page != 1 || res.HasMore {
-		t.Fatalf("logs decode: %v %+v", err, res)
-	}
+       am, ls, h := setupWebUI(t)
+       ctx := context.Background()
+       if _, err := am.AddAPIKey(ctx, "acc", "k", "", 0); err != nil {
+               t.Fatal(err)
+       }
+       rl := &logpkg.RequestLog{Time: time.Now(), AccountID: 1, Method: "GET", URL: "u"}
+       if err := ls.Insert(ctx, rl); err != nil {
+               t.Fatal(err)
+       }
+       req := httptest.NewRequest(http.MethodGet, "/admin/api/logs", nil)
+       rec := httptest.NewRecorder()
+       h.ServeHTTP(rec, req)
+       if rec.Code != http.StatusOK {
+               t.Fatalf("logs status: %d", rec.Code)
+       }
+       var res struct {
+               Logs    []logpkg.RequestLog `json:"logs"`
+               Page    int                 `json:"page"`
+               HasMore bool                `json:"has_more"`
+       }
+       if err := json.NewDecoder(rec.Body).Decode(&res); err != nil || len(res.Logs) != 1 || res.Logs[0].Method != "GET" || res.Logs[0].AccountName != "acc" || res.Page != 1 || res.HasMore {
+               t.Fatalf("logs decode: %v %+v", err, res)
+       }
 }

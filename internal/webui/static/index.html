@@ -28,7 +28,7 @@
   <h2>Accounts</h2>
   <table id="accounts">
     <thead>
-      <tr><th>ID</th><th>Type</th><th>Name</th><th>API Key</th><th>Refresh Token</th><th>Access Token</th><th>Priority</th><th>Actions</th></tr>
+      <tr><th>Name</th><th>Type</th><th>API Base URL</th><th>API Key</th><th>Refresh Token</th><th>Access Token</th><th>Priority</th><th>Actions</th></tr>
     </thead>
     <tbody></tbody>
   </table>
@@ -73,8 +73,7 @@ async function loadAccounts() {
       tr.addEventListener('dragover', dragOver);
       tr.addEventListener('drop', drop);
       const type = a.type === 0 ? 'API Key' : 'ChatGPT';
-      const id = a.account_id || a.id;
-      tr.innerHTML = `<td>${id}</td><td>${type}</td><td>${a.name}</td><td>${shorten(a.api_key)}</td><td>${shorten(a.refresh_token)}</td><td>${shorten(a.access_token)}</td><td>${a.priority}</td>`;
+      tr.innerHTML = `<td>${a.name}</td><td>${type}</td><td>${a.base_url || ''}</td><td>${shorten(a.api_key)}</td><td>${shorten(a.refresh_token)}</td><td>${shorten(a.access_token)}</td><td>${a.priority}</td>`;
       const actions = document.createElement('td');
       const del = document.createElement('button');
       del.textContent = 'Delete';
