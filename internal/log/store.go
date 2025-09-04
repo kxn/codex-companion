@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"codex-companion/internal/logger"
@@ -52,19 +53,31 @@ func (s *Store) init() error {
         url TEXT,
         req_header BLOB,
        req_body TEXT,
-       req_size INTEGER,
+       req_size INTEGER NOT NULL DEFAULT 0,
        resp_header BLOB,
        resp_body TEXT,
-       resp_size INTEGER,
+       resp_size INTEGER NOT NULL DEFAULT 0,
         status INTEGER,
         duration_ms INTEGER,
         error TEXT
     )`
-	_, err := s.db.Exec(query)
-	if err != nil {
+	if _, err := s.db.Exec(query); err != nil {
 		logger.Errorf("create logs table failed: %v", err)
+		return err
 	}
-	return err
+	if _, err := s.db.Exec(`ALTER TABLE logs ADD COLUMN req_size INTEGER NOT NULL DEFAULT 0`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			logger.Errorf("add req_size column failed: %v", err)
+			return err
+		}
+	}
+	if _, err := s.db.Exec(`ALTER TABLE logs ADD COLUMN resp_size INTEGER NOT NULL DEFAULT 0`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			logger.Errorf("add resp_size column failed: %v", err)
+			return err
+		}
+	}
+	return nil
 }
 
 // Insert saves a RequestLog.
