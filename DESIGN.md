@@ -59,8 +59,15 @@ internal/
   - for ChatGPT accounts use `Bearer <account.AccessToken>`, forward to
     `https://chatgpt.com/backend-api/codex`, and strip the leading `/v1` from
     the request path.
-   - forward the request using `http.Transport`.
-   - log request and response through the log package.
+  - normalize requests based on auth mode:
+    - ChatGPT accounts add a `chatgpt-account-id` header, set the JSON field
+      `store` to `false`, and add `include: ["reasoning.encrypted_content"]`
+      so encrypted reasoning is returned instead of stored server-side.
+    - API key accounts omit `chatgpt-account-id`, set `store` to `true`, and do
+      not send an `include` field, allowing the server to store reasoning items
+      referenced by ID.
+  - forward the request using `http.Transport`.
+  - log request and response through the log package.
 6. Implement `internal/webui`:
    - `AdminHandler` registers routes on `/admin`.
    - static file server for `GET /admin` showing forms to add/remove accounts and view logs.
@@ -98,6 +105,9 @@ internal/
 4. **Proxy Handler**
    - Accepts Codex requests, selects an account from the scheduler, rewrites the `Authorization` header, and streams the request to the upstream Codex endpoint.
    - Uses `APIKey` for API key accounts or `AccessToken` for ChatGPT-login accounts.
+   - Adjusts headers and body based on the authentication mode:
+     - ChatGPT accounts include a `chatgpt-account-id` header, set `store` to `false`, and request `include: ["reasoning.encrypted_content"]`, which yields an encrypted reasoning payload in the response.
+     - API key accounts omit that header, send `store` as `true`, and skip the `include` field so reasoning content is stored server-side and referenced by ID.
    - Streams the response back to the client.
    - On failures, retries with the next available account when possible.
 

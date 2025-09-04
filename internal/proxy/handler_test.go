@@ -3,10 +3,12 @@ package proxy
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,16 +117,55 @@ func TestServeHTTPChatGPTAccount(t *testing.T) {
 			w.WriteHeader(401)
 			return
 		}
+		if r.Header.Get("chatgpt-account-id") != "aid" {
+			t.Fatalf("missing chatgpt-account-id header")
+		}
+		b, _ := io.ReadAll(r.Body)
+		var m map[string]any
+		json.Unmarshal(b, &m)
+		if v, ok := m["store"].(bool); !ok || v {
+			t.Fatalf("store not false: %v", m["store"])
+		}
+		inc, ok := m["include"].([]any)
+		if !ok || len(inc) != 1 || inc[0] != "reasoning.encrypted_content" {
+			t.Fatalf("include not normalized: %v", m["include"])
+		}
 		io.WriteString(w, "ok")
 	})
 	ctx := context.Background()
-	a, _ := mgr.AddChatGPT(ctx, "cg", "rt", "", 1)
+	a, _ := mgr.AddChatGPT(ctx, "cg", "rt", "aid", 1)
 	a.AccessToken = "at"
 	a.TokenExpiresAt = time.Now().Add(time.Hour)
 	if err := mgr.Update(ctx, a); err != nil {
 		t.Fatalf("update: %v", err)
 	}
-	req := httptest.NewRequest("GET", "http://localhost/v1/responses", nil)
+	req := httptest.NewRequest("POST", "http://localhost/v1/responses", strings.NewReader(`{"store":true}`))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || rec.Body.String() != "ok" {
+		t.Fatalf("unexpected resp %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestServeHTTPAPIKeyNormalize(t *testing.T) {
+	h, mgr, _ := setupProxy(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("chatgpt-account-id") != "" {
+			t.Fatalf("chatgpt-account-id should be empty")
+		}
+		b, _ := io.ReadAll(r.Body)
+		var m map[string]any
+		json.Unmarshal(b, &m)
+		if v, ok := m["store"].(bool); !ok || !v {
+			t.Fatalf("store not true: %v", m["store"])
+		}
+		if _, ok := m["include"]; ok {
+			t.Fatalf("include should be removed")
+		}
+		io.WriteString(w, "ok")
+	})
+	ctx := context.Background()
+	mgr.AddAPIKey(ctx, "a", "k", "", 1)
+	req := httptest.NewRequest("POST", "http://localhost/v1/responses", strings.NewReader(`{"store":false,"include":["x"]}`))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != 200 || rec.Body.String() != "ok" {

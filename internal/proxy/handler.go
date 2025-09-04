@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -55,6 +56,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reqBody, _ = io.ReadAll(r.Body)
 		r.Body.Close()
 	}
+	origBody := make([]byte, len(reqBody))
+	copy(origBody, reqBody)
 
 	for attempts := 0; attempts < 3; attempts++ {
 		account, err := h.Scheduler.Next(ctx)
@@ -65,19 +68,38 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		base := h.UpstreamAPI
 		path := r.URL.Path
+		body := origBody
 		if account.Type == acct.APIKeyAccount {
 			if account.BaseURL != "" {
 				base = account.BaseURL
 			}
+			// normalize request body: store true and remove include
+			if len(body) > 0 {
+				var m map[string]any
+				if json.Unmarshal(body, &m) == nil {
+					m["store"] = true
+					delete(m, "include")
+					body, _ = json.Marshal(m)
+				}
+			}
 		} else {
 			base = h.UpstreamChatGPT
 			path = strings.TrimPrefix(path, "/v1")
+			// normalize for ChatGPT accounts
+			if len(body) > 0 {
+				var m map[string]any
+				if json.Unmarshal(body, &m) == nil {
+					m["store"] = false
+					m["include"] = []string{"reasoning.encrypted_content"}
+					body, _ = json.Marshal(m)
+				}
+			}
 		}
 		upstreamURL := base + path
 		if r.URL.RawQuery != "" {
 			upstreamURL += "?" + r.URL.RawQuery
 		}
-		req, err := http.NewRequestWithContext(ctx, r.Method, upstreamURL, bytes.NewReader(reqBody))
+		req, err := http.NewRequestWithContext(ctx, r.Method, upstreamURL, bytes.NewReader(body))
 		if err != nil {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
@@ -85,8 +107,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		req.Header = r.Header.Clone()
 		if account.Type == acct.APIKeyAccount {
 			req.Header.Set("Authorization", "Bearer "+account.APIKey)
+			req.Header.Del("chatgpt-account-id")
 		} else {
 			req.Header.Set("Authorization", "Bearer "+account.AccessToken)
+			if account.AccountID != "" {
+				req.Header.Set("chatgpt-account-id", account.AccountID)
+			}
 		}
 		resp, err := h.Client.Do(req)
 		if err != nil {
