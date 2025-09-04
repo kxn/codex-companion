@@ -15,6 +15,7 @@
   <form id="apiKeyForm">
     <input name="name" placeholder="Name" required>
     <input name="api_key" placeholder="API Key" required>
+    <input name="base_url" placeholder="Base URL">
     <button type="submit">Add</button>
   </form>
 
@@ -38,6 +39,26 @@
 </section>
 
 </main>
+
+<dialog id="editDialog">
+  <form id="editForm">
+    <input type="hidden" name="id">
+    <input name="name" placeholder="Name" required>
+    <div id="apiKeyGroup">
+      <input name="api_key" placeholder="API Key">
+      <input name="base_url" placeholder="Base URL">
+    </div>
+    <div id="chatgptGroup">
+      <input name="refresh_token" placeholder="Refresh Token">
+      <input name="account_id" placeholder="Account ID">
+    </div>
+    <menu>
+      <button value="cancel">Cancel</button>
+      <button id="editSave" value="default">Save</button>
+    </menu>
+  </form>
+</dialog>
+
 <script>
 let accountsCache = [];
 async function loadAccounts() {
@@ -68,6 +89,10 @@ async function loadAccounts() {
         }
         loadAccounts();
       };
+      const editBtn = document.createElement('button');
+      editBtn.textContent = 'Edit';
+      editBtn.onclick = () => openEdit(a);
+      actions.appendChild(editBtn);
       actions.appendChild(del);
       tr.appendChild(actions);
       tbody.appendChild(tr);
@@ -87,7 +112,8 @@ document.getElementById('apiKeyForm').onsubmit = async (e) => {
       body: JSON.stringify({
         type: 'api_key',
         name: f.get('name'),
-        api_key: f.get('api_key')
+        api_key: f.get('api_key'),
+        base_url: f.get('base_url')
       })
     });
     if (!resp.ok) {
@@ -170,6 +196,45 @@ async function saveOrder(){
 function load() {
   loadAccounts();
 }
+
+function openEdit(a) {
+  const dlg = document.getElementById('editDialog');
+  const form = document.getElementById('editForm');
+  form.id.value = a.id;
+  form.name.value = a.name;
+  form.api_key.value = a.api_key || '';
+  form.base_url.value = a.base_url || '';
+  form.refresh_token.value = a.refresh_token || '';
+  form.account_id.value = a.account_id || '';
+  document.getElementById('apiKeyGroup').style.display = a.type === 0 ? '' : 'none';
+  document.getElementById('chatgptGroup').style.display = a.type === 0 ? 'none' : '';
+  dlg.showModal();
+}
+
+document.getElementById('editForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  const id = f.get('id');
+  const acc = accountsCache.find(a => a.id == id);
+  acc.name = f.get('name');
+  if (acc.type === 0) {
+    acc.api_key = f.get('api_key');
+    acc.base_url = f.get('base_url');
+  } else {
+    acc.refresh_token = f.get('refresh_token');
+    acc.account_id = f.get('account_id');
+  }
+  const resp = await fetch(`/admin/api/accounts/${id}`, {
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(acc)
+  });
+  if (!resp.ok) {
+    alert('Update failed ' + resp.status);
+  }
+  document.getElementById('editDialog').close();
+  loadAccounts();
+};
 
 load();
 </script>

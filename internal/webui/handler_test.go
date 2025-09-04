@@ -91,7 +91,7 @@ func TestAccountsAPI(t *testing.T) {
 		t.Fatalf("post chatgpt: %d", rec.Code)
 	}
 
-	body = `{"type":"api_key","name":"ak","api_key":"k"}`
+	body = `{"type":"api_key","name":"ak","api_key":"k","base_url":"http://example.com"}`
 	req = httptest.NewRequest(http.MethodPost, "/admin/api/accounts", strings.NewReader(body))
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -101,6 +101,9 @@ func TestAccountsAPI(t *testing.T) {
 	var a account.Account
 	if err := json.NewDecoder(rec.Body).Decode(&a); err != nil {
 		t.Fatal(err)
+	}
+	if a.BaseURL != "http://example.com" {
+		t.Fatalf("unexpected base url: %s", a.BaseURL)
 	}
 
 	// duplicate API key should be rejected
@@ -112,6 +115,7 @@ func TestAccountsAPI(t *testing.T) {
 	}
 
 	a.Name = "new"
+	a.BaseURL = "http://new.example.com"
 	buf, _ := json.Marshal(&a)
 	req = httptest.NewRequest(http.MethodPut, "/admin/api/accounts/"+strconv.FormatInt(a.ID, 10), bytes.NewReader(buf))
 	rec = httptest.NewRecorder()
@@ -130,7 +134,7 @@ func TestAccountsAPI(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&list); err != nil || len(list) != 2 {
 		t.Fatalf("list decode: %v %v", err, list)
 	}
-	if list[0].Name != "cg" || list[1].Name != "new" {
+	if list[0].Name != "cg" || list[1].Name != "new" || list[1].BaseURL != "http://new.example.com" {
 		t.Fatalf("unexpected list: %+v", list)
 	}
 
@@ -145,12 +149,12 @@ func TestAccountsAPI(t *testing.T) {
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	json.NewDecoder(rec.Body).Decode(&list)
-	if len(list) != 1 || list[0].Name != "new" {
+	if len(list) != 1 || list[0].Name != "new" || list[0].BaseURL != "http://new.example.com" {
 		t.Fatalf("after delete: %+v", list)
 	}
 
 	got, _ := mgr.Get(context.Background(), list[0].ID)
-	if got.Name != "new" {
+	if got.Name != "new" || got.BaseURL != "http://new.example.com" {
 		t.Fatalf("manager not updated: %+v", got)
 	}
 }
