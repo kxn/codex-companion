@@ -24,7 +24,10 @@ var staticFiles embed.FS
 func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 	mux := http.NewServeMux()
 	// Static files
-	fsys, _ := fs.Sub(staticFiles, "static")
+	fsys, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		logger.Errorf("load static files: %v", err)
+	}
 	mux.Handle("/", http.FileServer(http.FS(fsys)))
 
 	// API
@@ -38,7 +41,9 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			json.NewEncoder(w).Encode(accounts)
+			if err := json.NewEncoder(w).Encode(accounts); err != nil {
+				logger.Errorf("encode accounts failed: %v", err)
+			}
 		case http.MethodPost:
 			var req struct {
 				Type         string `json:"type"`
@@ -89,7 +94,9 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 				}
 				return
 			}
-			json.NewEncoder(w).Encode(a)
+			if err := json.NewEncoder(w).Encode(a); err != nil {
+				logger.Errorf("encode account failed: %v", err)
+			}
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
@@ -106,7 +113,9 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		json.NewEncoder(w).Encode(a)
+		if err := json.NewEncoder(w).Encode(a); err != nil {
+			logger.Errorf("encode account failed: %v", err)
+		}
 	})
 
 	mux.HandleFunc("/api/accounts/", func(w http.ResponseWriter, r *http.Request) {
@@ -159,6 +168,7 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 		offset := (page - 1) * size
 		logs, err := ls.List(ctx, size+1, offset)
 		if err != nil {
+			logger.Errorf("list logs failed: %v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -167,11 +177,13 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 			hasMore = true
 			logs = logs[:size]
 		}
-		json.NewEncoder(w).Encode(struct {
+		if err := json.NewEncoder(w).Encode(struct {
 			Logs    []*logpkg.RequestLog `json:"logs"`
 			Page    int                  `json:"page"`
 			HasMore bool                 `json:"has_more"`
-		}{logs, page, hasMore})
+		}{logs, page, hasMore}); err != nil {
+			logger.Errorf("encode logs failed: %v", err)
+		}
 	})
 
 	return http.StripPrefix("/admin", mux)
@@ -210,11 +222,17 @@ func ImportAuth(ctx context.Context, am *account.Manager) (*account.Account, err
 	}
 	accounts, err := am.List(ctx)
 	if err != nil {
+		logger.Errorf("list accounts failed: %v", err)
 		return nil, err
 	}
 	priority := 0
 	if len(accounts) > 0 {
 		priority = accounts[len(accounts)-1].Priority + 1
 	}
-	return am.AddChatGPT(ctx, "imported", cfg.Tokens.RefreshToken, cfg.Tokens.AccountID, priority)
+	name := cfg.Tokens.AccountID
+	if len(name) > 8 {
+		name = name[:8]
+	}
+	logger.Infof("importing ChatGPT account %s", name)
+	return am.AddChatGPT(ctx, name, cfg.Tokens.RefreshToken, cfg.Tokens.AccountID, priority)
 }
