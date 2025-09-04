@@ -54,12 +54,27 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
+
+			// Determine priority if not provided
+			priority := req.Priority
+			if priority == 0 {
+				accounts, err := am.List(ctx)
+				if err != nil {
+					logger.Errorf("list accounts failed: %v", err)
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
+				}
+				if len(accounts) > 0 {
+					priority = accounts[len(accounts)-1].Priority + 1
+				}
+			}
+
 			var a *account.Account
 			var err error
 			if req.Type == "api_key" {
-				a, err = am.AddAPIKey(ctx, req.Name, req.APIKey, req.BaseURL, req.Priority)
+				a, err = am.AddAPIKey(ctx, req.Name, req.APIKey, req.BaseURL, priority)
 			} else if req.Type == "chatgpt" {
-				a, err = am.AddChatGPT(ctx, req.Name, req.RefreshToken, req.AccountID, req.Priority)
+				a, err = am.AddChatGPT(ctx, req.Name, req.RefreshToken, req.AccountID, priority)
 			} else {
 				logger.Warnf("unknown account type %s", req.Type)
 				http.Error(w, "unknown type", http.StatusBadRequest)
@@ -132,7 +147,17 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 
 	mux.HandleFunc("/api/logs", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		logs, err := ls.List(ctx, 100)
+		q := r.URL.Query()
+		page, _ := strconv.Atoi(q.Get("page"))
+		if page < 1 {
+			page = 1
+		}
+		size, _ := strconv.Atoi(q.Get("size"))
+		if size <= 0 {
+			size = 100
+		}
+		offset := (page - 1) * size
+		logs, err := ls.List(ctx, size, offset)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -174,5 +199,13 @@ func ImportAuth(ctx context.Context, am *account.Manager) (*account.Account, err
 		logger.Warnf("refresh token not found")
 		return nil, errors.New("refresh token not found")
 	}
-	return am.AddChatGPT(ctx, "imported", cfg.Tokens.RefreshToken, cfg.Tokens.AccountID, 0)
+	accounts, err := am.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	priority := 0
+	if len(accounts) > 0 {
+		priority = accounts[len(accounts)-1].Priority + 1
+	}
+	return am.AddChatGPT(ctx, "imported", cfg.Tokens.RefreshToken, cfg.Tokens.AccountID, priority)
 }

@@ -15,7 +15,6 @@
   <form id="apiKeyForm">
     <input name="name" placeholder="Name" required>
     <input name="api_key" placeholder="API Key" required>
-    <input name="priority" type="number" value="0">
     <button type="submit">Add</button>
   </form>
 
@@ -23,7 +22,6 @@
   <form id="chatgptForm">
     <input name="name" placeholder="Name" required>
     <input name="refresh_token" placeholder="Refresh Token" required>
-    <input name="priority" type="number" value="0">
     <button type="submit">Add</button>
   </form>
   <button id="importBtn">Import auth.json</button>
@@ -41,15 +39,22 @@
 
 </main>
 <script>
+let accountsCache = [];
 async function loadAccounts() {
   try {
     const res = await fetch('/admin/api/accounts');
     const accounts = await res.json();
+    accountsCache = accounts;
     const tbody = document.querySelector('#accounts tbody');
     tbody.innerHTML = '';
     const shorten = s => s ? (s.length > 10 ? s.slice(0,10) + '...' : s) : '';
     accounts.forEach(a => {
       const tr = document.createElement('tr');
+      tr.draggable = true;
+      tr.dataset.id = a.id;
+      tr.addEventListener('dragstart', dragStart);
+      tr.addEventListener('dragover', dragOver);
+      tr.addEventListener('drop', drop);
       const type = a.type === 0 ? 'API Key' : 'ChatGPT';
       const id = a.account_id || a.id;
       tr.innerHTML = `<td>${id}</td><td>${type}</td><td>${a.name}</td><td>${shorten(a.api_key)}</td><td>${shorten(a.refresh_token)}</td><td>${shorten(a.access_token)}</td><td>${a.priority}</td>`;
@@ -82,8 +87,7 @@ document.getElementById('apiKeyForm').onsubmit = async (e) => {
       body: JSON.stringify({
         type: 'api_key',
         name: f.get('name'),
-        api_key: f.get('api_key'),
-        priority: Number(f.get('priority') || 0)
+        api_key: f.get('api_key')
       })
     });
     if (!resp.ok) {
@@ -106,8 +110,7 @@ document.getElementById('chatgptForm').onsubmit = async (e) => {
       body: JSON.stringify({
         type: 'chatgpt',
         name: f.get('name'),
-        refresh_token: f.get('refresh_token'),
-        priority: Number(f.get('priority') || 0)
+        refresh_token: f.get('refresh_token')
       })
     });
     if (!resp.ok) {
@@ -124,13 +127,45 @@ document.getElementById('importBtn').onclick = async () => {
   try {
     const resp = await fetch('/admin/api/accounts/import', {method: 'POST'});
     if (!resp.ok) {
-      console.error('Import auth.json failed', resp.status);
+      alert('Import auth.json failed: ' + (await resp.text()));
     }
   } catch (e) {
     console.error('Import auth.json error', e);
   }
   loadAccounts();
 };
+
+let dragged;
+function dragStart(e){
+  dragged = this;
+  e.dataTransfer.effectAllowed = 'move';
+}
+function dragOver(e){
+  e.preventDefault();
+}
+function drop(e){
+  e.preventDefault();
+  if(dragged !== this){
+    const tbody = this.parentNode;
+    tbody.insertBefore(dragged, this);
+    saveOrder();
+  }
+}
+async function saveOrder(){
+  const rows = document.querySelectorAll('#accounts tbody tr');
+  for(let i=0;i<rows.length;i++){
+    const id = Number(rows[i].dataset.id);
+    const acc = accountsCache.find(a => a.id === id);
+    if(!acc) continue;
+    acc.priority = i;
+    await fetch(`/admin/api/accounts/${id}`, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(acc)
+    });
+  }
+  loadAccounts();
+}
 
 function load() {
   loadAccounts();

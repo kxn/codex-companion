@@ -65,7 +65,7 @@ func TestInsertList(t *testing.T) {
 			t.Fatalf("insert %d: %v", i+1, err)
 		}
 	}
-	logs, err := s.List(ctx, 2)
+	logs, err := s.List(ctx, 2, 0)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -74,5 +74,11 @@ func TestInsertList(t *testing.T) {
 	}
 	if logs[0].ReqHeader.Get("C") != "3" || logs[0].ReqBody != "req3" || logs[0].RespHeader.Get("Z") != "3" || logs[0].RespBody != "resp3" {
 		t.Fatalf("log fields not restored: %+v", logs[0])
+	}
+
+	// test offset
+	logs, err = s.List(ctx, 1, 1)
+	if err != nil || len(logs) != 1 || logs[0].ID == rl3.ID {
+		t.Fatalf("offset failed: %+v %v", logs, err)
 	}
 }

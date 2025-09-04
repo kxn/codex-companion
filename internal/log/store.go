@@ -64,9 +64,9 @@ func (s *Store) Insert(ctx context.Context, rl *RequestLog) error {
 	return err
 }
 
-// List returns latest logs limited by n.
-func (s *Store) List(ctx context.Context, n int) ([]*RequestLog, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, time, account_id, method, url, req_header, req_body, resp_header, resp_body, status, error FROM logs ORDER BY id DESC LIMIT ?`, n)
+// List returns latest logs limited by n with offset.
+func (s *Store) List(ctx context.Context, n, offset int) ([]*RequestLog, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, time, account_id, method, url, req_header, req_body, resp_header, resp_body, status, error FROM logs ORDER BY id DESC LIMIT ? OFFSET ?`, n, offset)
 	if err != nil {
 		return nil, err
 	}

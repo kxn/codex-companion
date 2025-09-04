@@ -56,7 +56,7 @@ func TestServeHTTPForwardAndLog(t *testing.T) {
 	if rec.Code != 200 || rec.Body.String() != "ok" {
 		t.Fatalf("bad resp %d %s", rec.Code, rec.Body.String())
 	}
-	logs, err := ls.List(ctx, 10)
+	logs, err := ls.List(ctx, 10, 0)
 	if err != nil || len(logs) != 1 || logs[0].Status != 200 {
 		t.Fatalf("logs %v %v", logs, err)
 	}
