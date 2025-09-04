@@ -32,7 +32,6 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 		ctx := r.Context()
 		switch r.Method {
 		case http.MethodGet:
-			logger.Debugf("list accounts")
 			accounts, err := am.List(ctx)
 			if err != nil {
 				logger.Errorf("list accounts failed: %v", err)
@@ -46,6 +45,7 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 				Name         string `json:"name"`
 				APIKey       string `json:"api_key"`
 				RefreshToken string `json:"refresh_token"`
+				AccountID    string `json:"account_id"`
 				Priority     int    `json:"priority"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -58,7 +58,7 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 			if req.Type == "api_key" {
 				a, err = am.AddAPIKey(ctx, req.Name, req.APIKey, req.Priority)
 			} else if req.Type == "chatgpt" {
-				a, err = am.AddChatGPT(ctx, req.Name, req.RefreshToken, req.Priority)
+				a, err = am.AddChatGPT(ctx, req.Name, req.RefreshToken, req.AccountID, req.Priority)
 			} else {
 				logger.Warnf("unknown account type %s", req.Type)
 				http.Error(w, "unknown type", http.StatusBadRequest)
@@ -84,14 +84,12 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
-		logger.Infof("importing auth.json")
 		a, err := ImportAuth(r.Context(), am)
 		if err != nil {
 			logger.Errorf("import auth failed: %v", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		logger.Infof("imported account %d", a.ID)
 		json.NewEncoder(w).Encode(a)
 	})
 
@@ -164,6 +162,7 @@ func ImportAuth(ctx context.Context, am *account.Manager) (*account.Account, err
 	var cfg struct {
 		Tokens struct {
 			RefreshToken string `json:"refresh_token"`
+			AccountID    string `json:"account_id"`
 		} `json:"tokens"`
 	}
 	if err := json.Unmarshal(data, &cfg); err != nil {
@@ -174,5 +173,5 @@ func ImportAuth(ctx context.Context, am *account.Manager) (*account.Account, err
 		logger.Warnf("refresh token not found")
 		return nil, errors.New("refresh token not found")
 	}
-	return am.AddChatGPT(ctx, "imported", cfg.Tokens.RefreshToken, 0)
+	return am.AddChatGPT(ctx, "imported", cfg.Tokens.RefreshToken, cfg.Tokens.AccountID, 0)
 }

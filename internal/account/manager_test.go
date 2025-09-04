@@ -40,7 +40,7 @@ func TestAddAndGet(t *testing.T) {
 		t.Fatalf("unexpected account: %+v", got)
 	}
 
-	a2, err := mgr.AddChatGPT(ctx, "a2", "rt", 2)
+	a2, err := mgr.AddChatGPT(ctx, "a2", "rt", "", 2)
 	if err != nil {
 		t.Fatalf("add chatgpt: %v", err)
 	}
@@ -97,10 +97,10 @@ func TestDuplicate(t *testing.T) {
 		t.Fatalf("expected duplicate api key error, got %v", err)
 	}
 
-	if _, err := mgr.AddChatGPT(ctx, "c1", "rt1", 0); err != nil {
+	if _, err := mgr.AddChatGPT(ctx, "c1", "rt1", "", 0); err != nil {
 		t.Fatalf("add chatgpt: %v", err)
 	}
-	if _, err := mgr.AddChatGPT(ctx, "c2", "rt1", 0); !errors.Is(err, ErrDuplicate) {
+	if _, err := mgr.AddChatGPT(ctx, "c2", "rt1", "", 0); !errors.Is(err, ErrDuplicate) {
 		t.Fatalf("expected duplicate chatgpt error, got %v", err)
 	}
 }

@@ -65,7 +65,7 @@ func TestNextSkipsExhausted(t *testing.T) {
 func TestNextRefreshFailureFallback(t *testing.T) {
 	s, mgr := setupScheduler(t)
 	ctx := context.Background()
-	cg, _ := mgr.AddChatGPT(ctx, "cg", "rt", 1)
+	cg, _ := mgr.AddChatGPT(ctx, "cg", "rt", "", 1)
 	cg.TokenExpiresAt = time.Now().Add(-time.Minute)
 	mgr.Update(ctx, cg)
 	ak, _ := mgr.AddAPIKey(ctx, "a", "k", 2)
@@ -81,7 +81,7 @@ func TestNextRefreshFailureFallback(t *testing.T) {
 func TestNextRefreshesChatGPT(t *testing.T) {
 	s, mgr := setupScheduler(t)
 	ctx := context.Background()
-	cg, _ := mgr.AddChatGPT(ctx, "cg", "rt", 1)
+	cg, _ := mgr.AddChatGPT(ctx, "cg", "rt", "", 1)
 	cg.TokenExpiresAt = time.Now().Add(-time.Minute)
 	mgr.Update(ctx, cg)
 	defer swap(rtFunc(func(r *http.Request) (*http.Response, error) {

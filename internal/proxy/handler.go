@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	acct "codex-companion/internal/account"
@@ -30,6 +31,10 @@ func New(s *scheduler.Scheduler, l *log.Store, upstream string) *Handler {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/admin") {
+		http.NotFound(w, r)
+		return
+	}
 	ctx := r.Context()
 	// read request body for logging and forwarding
 	var reqBody []byte

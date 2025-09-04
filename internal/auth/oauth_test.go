@@ -59,7 +59,7 @@ func setupAuthTestMgr(t *testing.T) (*account.Manager, *account.Account) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	a, err := mgr.AddChatGPT(ctx, "c", "rt", 1)
+	a, err := mgr.AddChatGPT(ctx, "c", "rt", "", 1)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -115,7 +115,7 @@ func TestServeHTTPChatGPTAccount(t *testing.T) {
 		io.WriteString(w, "ok")
 	})
 	ctx := context.Background()
-	a, _ := mgr.AddChatGPT(ctx, "cg", "rt", 1)
+	a, _ := mgr.AddChatGPT(ctx, "cg", "rt", "", 1)
 	a.AccessToken = "at"
 	a.TokenExpiresAt = time.Now().Add(time.Hour)
 	if err := mgr.Update(ctx, a); err != nil {
