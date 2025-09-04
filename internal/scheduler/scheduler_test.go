@@ -85,18 +85,18 @@ func TestNextRefreshesChatGPT(t *testing.T) {
 	cg.TokenExpiresAt = time.Now().Add(-time.Minute)
 	mgr.Update(ctx, cg)
 	defer swap(rtFunc(func(r *http.Request) (*http.Response, error) {
-		body := `{"access_token":"new","expires_in":60}`
+		body := `{"access_token":"new","refresh_token":"rt2","expires_in":60}`
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
 	}))()
 	got, err := s.Next(ctx)
 	if err != nil || got.ID != cg.ID {
 		t.Fatalf("expected chatgpt account, got %+v %v", got, err)
 	}
-	if got.AccessToken != "new" {
+	if got.AccessToken != "new" || got.RefreshToken != "rt2" {
 		t.Fatalf("token not refreshed: %+v", got)
 	}
 	stored, _ := mgr.Get(ctx, cg.ID)
-	if stored.AccessToken != "new" {
+	if stored.AccessToken != "new" || stored.RefreshToken != "rt2" {
 		t.Fatalf("db not updated: %+v", stored)
 	}
 }
