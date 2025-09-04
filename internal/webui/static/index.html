@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Codex Companion</title>
+</head>
+<body>
+<h1>Codex Companion</h1>
+
+<section>
+  <h2>Add API Key Account</h2>
+  <form id="apiKeyForm">
+    <input name="name" placeholder="Name" required>
+    <input name="api_key" placeholder="API Key" required>
+    <input name="priority" type="number" value="0">
+    <button type="submit">Add</button>
+  </form>
+
+  <h2>Add ChatGPT Account</h2>
+  <form id="chatgptForm">
+    <input name="name" placeholder="Name" required>
+    <input name="refresh_token" placeholder="Refresh Token" required>
+    <input name="priority" type="number" value="0">
+    <button type="submit">Add</button>
+  </form>
+  <button id="importBtn">Import auth.json</button>
+</section>
+
+<section>
+  <h2>Accounts</h2>
+  <div id="accounts"></div>
+</section>
+
+<section>
+  <h2>Logs</h2>
+  <pre id="logs"></pre>
+</section>
+
+<script>
+async function loadAccounts() {
+  const res = await fetch('/admin/api/accounts');
+  const accounts = await res.json();
+  const container = document.getElementById('accounts');
+  container.innerHTML = '';
+  accounts.forEach(a => {
+    const div = document.createElement('div');
+    div.textContent = `${a.id}: ${a.name} (priority ${a.priority})`;
+    const del = document.createElement('button');
+    del.textContent = 'Delete';
+    del.onclick = async () => {
+      await fetch(`/admin/api/accounts/${a.id}`, {method: 'DELETE'});
+      loadAccounts();
+    };
+    div.appendChild(del);
+    container.appendChild(div);
+  });
+}
+
+async function loadLogs() {
+  const res = await fetch('/admin/api/logs');
+  const logs = await res.json();
+  document.getElementById('logs').textContent = JSON.stringify(logs, null, 2);
+}
+
+document.getElementById('apiKeyForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  await fetch('/admin/api/accounts', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      type: 'api_key',
+      name: f.get('name'),
+      api_key: f.get('api_key'),
+      priority: Number(f.get('priority') || 0)
+    })
+  });
+  e.target.reset();
+  loadAccounts();
+};
+
+document.getElementById('chatgptForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const f = new FormData(e.target);
+  await fetch('/admin/api/accounts', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      type: 'chatgpt',
+      name: f.get('name'),
+      refresh_token: f.get('refresh_token'),
+      priority: Number(f.get('priority') || 0)
+    })
+  });
+  e.target.reset();
+  loadAccounts();
+};
+
+document.getElementById('importBtn').onclick = async () => {
+  await fetch('/admin/api/accounts/import', {method: 'POST'});
+  loadAccounts();
+};
+
+function load() {
+  loadAccounts();
+  loadLogs();
+}
+
+load();
+</script>
+</body>
+</html>
