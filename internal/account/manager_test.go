@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -81,6 +82,26 @@ func TestListOrderUpdateDelete(t *testing.T) {
 	gone, err := mgr.Get(ctx, a1.ID)
 	if err != nil || gone != nil {
 		t.Fatalf("delete not effective: %v %v", gone, err)
+	}
+}
+
+func TestDuplicate(t *testing.T) {
+	db := setupTestDB(t)
+	mgr, _ := NewManager(db)
+	ctx := context.Background()
+
+	if _, err := mgr.AddAPIKey(ctx, "a1", "k1", 0); err != nil {
+		t.Fatalf("add api: %v", err)
+	}
+	if _, err := mgr.AddAPIKey(ctx, "a2", "k1", 0); !errors.Is(err, ErrDuplicate) {
+		t.Fatalf("expected duplicate api key error, got %v", err)
+	}
+
+	if _, err := mgr.AddChatGPT(ctx, "c1", "rt1", 0); err != nil {
+		t.Fatalf("add chatgpt: %v", err)
+	}
+	if _, err := mgr.AddChatGPT(ctx, "c2", "rt1", 0); !errors.Is(err, ErrDuplicate) {
+		t.Fatalf("expected duplicate chatgpt error, got %v", err)
 	}
 }
 

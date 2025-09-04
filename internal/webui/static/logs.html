@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Logs - Codex Companion</title>
+</head>
+<body>
+<h1>Logs</h1>
+<nav><a href="index.html">Accounts</a> | <a href="logs.html">Logs</a></nav>
+<table id="logs">
+  <thead>
+    <tr><th>ID</th><th>Time</th><th>Account</th><th>Method</th><th>URL</th><th>Status</th><th>Error</th><th>Details</th></tr>
+  </thead>
+  <tbody></tbody>
+</table>
+<dialog id="logModal">
+  <pre id="logDetail"></pre>
+  <button id="closeModal">Close</button>
+</dialog>
+<script>
+async function loadLogs() {
+  const res = await fetch('/admin/api/logs');
+  const logs = await res.json();
+  const tbody = document.querySelector('#logs tbody');
+  tbody.innerHTML = '';
+  logs.forEach(l => {
+    const tr = document.createElement('tr');
+    const time = new Date(l.Time).toLocaleString();
+    tr.innerHTML = `<td>${l.ID}</td><td>${time}</td><td>${l.AccountID}</td><td>${l.Method}</td><td>${l.URL}</td><td>${l.Status}</td><td>${l.Error || ''}</td>`;
+    const td = document.createElement('td');
+    const btn = document.createElement('button');
+    btn.textContent = 'Details';
+    btn.onclick = () => {
+      document.getElementById('logDetail').textContent = JSON.stringify(l, null, 2);
+      document.getElementById('logModal').showModal();
+    };
+    td.appendChild(btn);
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById('closeModal').onclick = () => document.getElementById('logModal').close();
+loadLogs();
+</script>
+</body>
+</html>

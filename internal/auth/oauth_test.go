@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -48,7 +49,8 @@ func TestExchangeRefreshTokenError(t *testing.T) {
 }
 
 func setupAuthTestMgr(t *testing.T) (*account.Manager, *account.Account) {
-	db, err := sql.Open("sqlite", "file:auth?mode=memory&cache=shared")
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatal(err)
 	}

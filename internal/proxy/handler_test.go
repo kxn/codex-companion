@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,7 +18,8 @@ import (
 
 func setupProxy(t *testing.T, upstream http.HandlerFunc) (*Handler, *account.Manager, *logpkg.Store) {
 	t.Helper()
-	db, err := sql.Open("sqlite", "file:proxy?mode=memory&cache=shared")
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatal(err)
 	}

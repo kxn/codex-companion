@@ -103,6 +103,14 @@ func TestAccountsAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// duplicate API key should be rejected
+	req = httptest.NewRequest(http.MethodPost, "/admin/api/accounts", strings.NewReader(body))
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected conflict for duplicate api key, got %d", rec.Code)
+	}
+
 	a.Name = "new"
 	buf, _ := json.Marshal(&a)
 	req = httptest.NewRequest(http.MethodPut, "/admin/api/accounts/"+strconv.FormatInt(a.ID, 10), bytes.NewReader(buf))
