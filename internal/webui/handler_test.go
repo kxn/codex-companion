@@ -83,7 +83,7 @@ func TestImportAuth(t *testing.T) {
 func TestAccountsAPI(t *testing.T) {
 	mgr, _, h := setupWebUI(t)
 
-	body := `{"type":"chatgpt","name":"cg","refresh_token":"rt","priority":2}`
+	body := `{"type":"chatgpt","name":"cg","refresh_token":"rt"}`
 	req := httptest.NewRequest(http.MethodPost, "/admin/api/accounts", strings.NewReader(body))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -91,7 +91,7 @@ func TestAccountsAPI(t *testing.T) {
 		t.Fatalf("post chatgpt: %d", rec.Code)
 	}
 
-	body = `{"type":"api_key","name":"ak","api_key":"k","priority":1}`
+	body = `{"type":"api_key","name":"ak","api_key":"k"}`
 	req = httptest.NewRequest(http.MethodPost, "/admin/api/accounts", strings.NewReader(body))
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
@@ -130,7 +130,7 @@ func TestAccountsAPI(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&list); err != nil || len(list) != 2 {
 		t.Fatalf("list decode: %v %v", err, list)
 	}
-	if list[0].Name != "new" || list[1].Name != "cg" {
+	if list[0].Name != "cg" || list[1].Name != "new" {
 		t.Fatalf("unexpected list: %+v", list)
 	}
 
@@ -145,12 +145,12 @@ func TestAccountsAPI(t *testing.T) {
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	json.NewDecoder(rec.Body).Decode(&list)
-	if len(list) != 1 || list[0].Name != "cg" {
+	if len(list) != 1 || list[0].Name != "new" {
 		t.Fatalf("after delete: %+v", list)
 	}
 
 	got, _ := mgr.Get(context.Background(), list[0].ID)
-	if got.Name != "cg" {
+	if got.Name != "new" {
 		t.Fatalf("manager not updated: %+v", got)
 	}
 }

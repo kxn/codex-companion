@@ -9,6 +9,12 @@
 <main>
 <h1>Logs</h1>
 <nav><a href="index.html">Accounts</a> | <a href="logs.html">Logs</a></nav>
+<div>
+  <button id="prevPage">Prev</button>
+  <span id="pageInfo"></span>
+  <button id="nextPage">Next</button>
+  <button id="toggleRefresh">Start Auto Refresh</button>
+</div>
 <table id="logs">
   <thead>
     <tr><th>ID</th><th>Time</th><th>Account</th><th>Method</th><th>URL</th><th>Status</th><th>Error</th><th>Details</th></tr>
@@ -21,8 +27,11 @@
 </dialog>
 </main>
 <script>
+let page = 1;
+let auto = false;
+let timer;
 async function loadLogs() {
-  const res = await fetch('/admin/api/logs');
+  const res = await fetch(`/admin/api/logs?page=${page}`);
   const logs = await res.json();
   const tbody = document.querySelector('#logs tbody');
   tbody.innerHTML = '';
@@ -41,8 +50,22 @@ async function loadLogs() {
     tr.appendChild(td);
     tbody.appendChild(tr);
   });
+  document.getElementById('pageInfo').textContent = `Page ${page}`;
 }
 
+document.getElementById('prevPage').onclick = () => { if(page>1){ page--; loadLogs(); }};
+document.getElementById('nextPage').onclick = () => { page++; loadLogs(); };
+const refreshBtn = document.getElementById('toggleRefresh');
+refreshBtn.onclick = () => {
+  auto = !auto;
+  if(auto){
+    timer = setInterval(loadLogs, 5000);
+    refreshBtn.textContent = 'Stop Auto Refresh';
+  } else {
+    clearInterval(timer);
+    refreshBtn.textContent = 'Start Auto Refresh';
+  }
+};
 document.getElementById('closeModal').onclick = () => document.getElementById('logModal').close();
 loadLogs();
 </script>
