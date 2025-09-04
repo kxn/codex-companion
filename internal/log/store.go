@@ -16,9 +16,9 @@ type RequestLog struct {
 	Method     string
 	URL        string
 	ReqHeader  http.Header
-	ReqBody    []byte
+	ReqBody    string
 	RespHeader http.Header
-	RespBody   []byte
+	RespBody   string
 	Status     int
 	Error      string
 }
@@ -45,9 +45,9 @@ func (s *Store) init() error {
         method TEXT,
         url TEXT,
         req_header BLOB,
-        req_body BLOB,
-        resp_header BLOB,
-        resp_body BLOB,
+       req_body TEXT,
+       resp_header BLOB,
+       resp_body TEXT,
         status INTEGER,
         error TEXT
     )`
