@@ -30,12 +30,12 @@ func TestExchangeRefreshToken(t *testing.T) {
 		if r.URL.String() != tokenURL {
 			t.Fatalf("unexpected url: %s", r.URL)
 		}
-		body := `{"access_token":"tok","expires_in":60}`
+		body := `{"access_token":"tok","refresh_token":"nrt","expires_in":60}`
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
 	}))()
-	tok, dur, err := ExchangeRefreshToken(context.Background(), "rt")
-	if err != nil || tok != "tok" || dur != 60*time.Second {
-		t.Fatalf("got %v %v %v", tok, dur, err)
+	tok, rt, dur, err := ExchangeRefreshToken(context.Background(), "rt")
+	if err != nil || tok != "tok" || rt != "nrt" || dur != 60*time.Second {
+		t.Fatalf("got %v %v %v %v", tok, rt, dur, err)
 	}
 }
 
@@ -43,7 +43,7 @@ func TestExchangeRefreshTokenError(t *testing.T) {
 	defer swapClient(roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: 400, Body: io.NopCloser(bytes.NewReader(nil)), Header: make(http.Header)}, nil
 	}))()
-	if _, _, err := ExchangeRefreshToken(context.Background(), "rt"); err == nil {
+	if _, _, _, err := ExchangeRefreshToken(context.Background(), "rt"); err == nil {
 		t.Fatalf("expected error")
 	}
 }
@@ -73,17 +73,17 @@ func TestRefreshUpdates(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer swapClient(roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		body := `{"access_token":"new","expires_in":120}`
+		body := `{"access_token":"new","refresh_token":"rt2","expires_in":120}`
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
 	}))()
 	if err := Refresh(context.Background(), mgr, a); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
-	if a.AccessToken != "new" {
+	if a.AccessToken != "new" || a.RefreshToken != "rt2" {
 		t.Fatalf("token not set: %+v", a)
 	}
 	got, _ := mgr.Get(context.Background(), a.ID)
-	if got.AccessToken != "new" {
+	if got.AccessToken != "new" || got.RefreshToken != "rt2" {
 		t.Fatalf("db not updated: %+v", got)
 	}
 }
