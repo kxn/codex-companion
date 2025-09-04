@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -81,6 +82,30 @@ func TestImportAuth(t *testing.T) {
 	h.ServeHTTP(rec, req)
 	if rec.Code == http.StatusOK {
 		t.Fatalf("expected error for missing file")
+	}
+}
+
+func TestImportAuthUpload(t *testing.T) {
+	_, _, h := setupWebUI(t)
+	data := `{"tokens":{"refresh_token":"rt","access_token":"at"},"last_refresh":"2024-01-01T00:00:00Z"}`
+	buf := &bytes.Buffer{}
+	mw := multipart.NewWriter(buf)
+	fw, err := mw.CreateFormFile("file", "auth.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fw.Write([]byte(data))
+	mw.Close()
+	req := httptest.NewRequest(http.MethodPost, "/admin/api/accounts/import/upload", buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	var a account.Account
+	if err := json.NewDecoder(rec.Body).Decode(&a); err != nil || a.RefreshToken != "rt" || a.AccessToken != "at" {
+		t.Fatalf("decode: %v %+v", err, a)
 	}
 }
 
