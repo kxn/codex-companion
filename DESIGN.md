@@ -29,8 +29,6 @@ internal/
     static/          # embedded HTML templates and JS
   log/
     store.go         # persistence for request logs
-external/
-  codex/             # reference checkout of https://github.com/openai/codex (not vendored)
 ```
 
 ## Implementation Steps
@@ -103,8 +101,7 @@ external/
    - REST endpoints under `/admin/api` implement JSON input/output.
 
 7. **Codex API Reference**
-   - Maintain a local checkout of <https://github.com/openai/codex> under `external/codex` for reference implementations of API calls and login flows.
-   - The proxy mirrors its REST endpoints and request formats but does not vendor any of the repository's code.
+   - The proxy mirrors Codex's REST endpoints and request formats but does not vendor any of the upstream repository's code.
 
 ### Codex `auth.json` format
 
