@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+
+	"codex-companion/internal/logger"
 )
 
 // AccountType distinguishes how credentials are handled.
@@ -17,16 +19,16 @@ const (
 
 // Account represents an upstream Codex account.
 type Account struct {
-	ID             int64
-	Name           string
-	Type           AccountType
-	APIKey         string
-	RefreshToken   string
-	AccessToken    string
-	TokenExpiresAt time.Time
-	Priority       int
-	Exhausted      bool
-	ResetAt        time.Time
+	ID             int64       `json:"id"`
+	Name           string      `json:"name"`
+	Type           AccountType `json:"type"`
+	APIKey         string      `json:"api_key"`
+	RefreshToken   string      `json:"refresh_token"`
+	AccessToken    string      `json:"access_token"`
+	TokenExpiresAt time.Time   `json:"token_expires_at"`
+	Priority       int         `json:"priority"`
+	Exhausted      bool        `json:"exhausted"`
+	ResetAt        time.Time   `json:"reset_at"`
 }
 
 // Manager handles CRUD operations on accounts stored in SQLite.
@@ -98,27 +100,35 @@ func (m *Manager) List(ctx context.Context) ([]*Account, error) {
 
 // AddAPIKey adds a new API key account.
 func (m *Manager) AddAPIKey(ctx context.Context, name, key string, priority int) (*Account, error) {
+	logger.Debugf("adding API key account %s priority %d", name, priority)
 	res, err := m.db.ExecContext(ctx, `INSERT INTO accounts(name, type, api_key, priority, exhausted) VALUES(?, ?, ?, ?, 0)`, name, APIKeyAccount, key, priority)
 	if err != nil {
+		logger.Errorf("add API key account failed: %v", err)
 		return nil, err
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
+		logger.Errorf("get last insert id failed: %v", err)
 		return nil, err
 	}
+	logger.Infof("added API key account %d", id)
 	return &Account{ID: id, Name: name, Type: APIKeyAccount, APIKey: key, Priority: priority}, nil
 }
 
 // AddChatGPT adds a new ChatGPT account using refresh token.
 func (m *Manager) AddChatGPT(ctx context.Context, name, refreshToken string, priority int) (*Account, error) {
+	logger.Debugf("adding ChatGPT account %s priority %d", name, priority)
 	res, err := m.db.ExecContext(ctx, `INSERT INTO accounts(name, type, refresh_token, priority, exhausted) VALUES(?, ?, ?, ?, 0)`, name, ChatGPTAccount, refreshToken, priority)
 	if err != nil {
+		logger.Errorf("add ChatGPT account failed: %v", err)
 		return nil, err
 	}
 	id, err := res.LastInsertId()
 	if err != nil {
+		logger.Errorf("get last insert id failed: %v", err)
 		return nil, err
 	}
+	logger.Infof("added ChatGPT account %d", id)
 	return &Account{ID: id, Name: name, Type: ChatGPTAccount, RefreshToken: refreshToken, Priority: priority}, nil
 }
 
@@ -131,7 +141,13 @@ func (m *Manager) Update(ctx context.Context, a *Account) error {
 
 // Delete removes an account by id.
 func (m *Manager) Delete(ctx context.Context, id int64) error {
+	logger.Debugf("deleting account %d", id)
 	_, err := m.db.ExecContext(ctx, `DELETE FROM accounts WHERE id=?`, id)
+	if err != nil {
+		logger.Errorf("delete account %d failed: %v", id, err)
+	} else {
+		logger.Infof("deleted account %d", id)
+	}
 	return err
 }
 
