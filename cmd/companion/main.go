@@ -10,6 +10,7 @@ import (
 
 	"codex-companion/internal/account"
 	logstore "codex-companion/internal/log"
+	"codex-companion/internal/logger"
 	"codex-companion/internal/proxy"
 	"codex-companion/internal/scheduler"
 	"codex-companion/internal/webui"
@@ -50,8 +51,9 @@ func main() {
 	if v := os.Getenv("CODEX_COMPANION_ADDR"); v != "" {
 		addr = v
 	}
-	stdlog.Printf("Starting server on %s", addr)
+	logger.Infof("Starting server on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
+		logger.Errorf("server error: %v", err)
 		stdlog.Fatal(err)
 	}
 }

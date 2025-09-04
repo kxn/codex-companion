@@ -5,7 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
+
+	"codex-companion/internal/logger"
 )
 
 // RequestLog records a proxied request.
@@ -35,6 +38,7 @@ type Store struct {
 func NewStore(db *sql.DB) (*Store, error) {
 	s := &Store{db: db}
 	if err := s.init(); err != nil {
+		logger.Errorf("init logs table failed: %v", err)
 		return nil, err
 	}
 	return s, nil
@@ -49,31 +53,58 @@ func (s *Store) init() error {
         url TEXT,
         req_header BLOB,
        req_body TEXT,
-       req_size INTEGER,
+       req_size INTEGER NOT NULL DEFAULT 0,
        resp_header BLOB,
        resp_body TEXT,
-       resp_size INTEGER,
+       resp_size INTEGER NOT NULL DEFAULT 0,
         status INTEGER,
         duration_ms INTEGER,
         error TEXT
     )`
-	_, err := s.db.Exec(query)
-	return err
+	if _, err := s.db.Exec(query); err != nil {
+		logger.Errorf("create logs table failed: %v", err)
+		return err
+	}
+	if _, err := s.db.Exec(`ALTER TABLE logs ADD COLUMN req_size INTEGER NOT NULL DEFAULT 0`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			logger.Errorf("add req_size column failed: %v", err)
+			return err
+		}
+	}
+	if _, err := s.db.Exec(`ALTER TABLE logs ADD COLUMN resp_size INTEGER NOT NULL DEFAULT 0`); err != nil {
+		if !strings.Contains(err.Error(), "duplicate column name") {
+			logger.Errorf("add resp_size column failed: %v", err)
+			return err
+		}
+	}
+	return nil
 }
 
 // Insert saves a RequestLog.
 func (s *Store) Insert(ctx context.Context, rl *RequestLog) error {
-	reqHeader, _ := json.Marshal(rl.ReqHeader)
-	respHeader, _ := json.Marshal(rl.RespHeader)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO logs(time, account_id, method, url, req_header, req_body, req_size, resp_header, resp_body, resp_size, status, duration_ms, error) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	reqHeader, err := json.Marshal(rl.ReqHeader)
+	if err != nil {
+		logger.Warnf("marshal req header failed: %v", err)
+	}
+	respHeader, err := json.Marshal(rl.RespHeader)
+	if err != nil {
+		logger.Warnf("marshal resp header failed: %v", err)
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO logs(time, account_id, method, url, req_header, req_body, req_size, resp_header, resp_body, resp_size, status, duration_ms, error) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		rl.Time, rl.AccountID, rl.Method, rl.URL, reqHeader, rl.ReqBody, rl.ReqSize, respHeader, rl.RespBody, rl.RespSize, rl.Status, rl.DurationMs, rl.Error)
-	return err
+	if err != nil {
+		logger.Errorf("insert request log failed: %v", err)
+		return err
+	}
+	logger.Debugf("logged request account %d status %d", rl.AccountID, rl.Status)
+	return nil
 }
 
 // List returns latest logs limited by n with offset.
 func (s *Store) List(ctx context.Context, n, offset int) ([]*RequestLog, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, time, account_id, method, url, req_header, req_body, req_size, resp_header, resp_body, resp_size, status, duration_ms, error FROM logs ORDER BY id DESC LIMIT ? OFFSET ?`, n, offset)
 	if err != nil {
+		logger.Errorf("query logs failed: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -82,11 +113,21 @@ func (s *Store) List(ctx context.Context, n, offset int) ([]*RequestLog, error) 
 		var rl RequestLog
 		var reqHeader, respHeader []byte
 		if err := rows.Scan(&rl.ID, &rl.Time, &rl.AccountID, &rl.Method, &rl.URL, &reqHeader, &rl.ReqBody, &rl.ReqSize, &respHeader, &rl.RespBody, &rl.RespSize, &rl.Status, &rl.DurationMs, &rl.Error); err != nil {
+			logger.Errorf("scan log row failed: %v", err)
 			return nil, err
 		}
-		json.Unmarshal(reqHeader, &rl.ReqHeader)
-		json.Unmarshal(respHeader, &rl.RespHeader)
+		if err := json.Unmarshal(reqHeader, &rl.ReqHeader); err != nil {
+			logger.Warnf("unmarshal req header failed: %v", err)
+		}
+		if err := json.Unmarshal(respHeader, &rl.RespHeader); err != nil {
+			logger.Warnf("unmarshal resp header failed: %v", err)
+		}
 		res = append(res, &rl)
 	}
-	return res, rows.Err()
+	if err := rows.Err(); err != nil {
+		logger.Errorf("iterate logs failed: %v", err)
+		return nil, err
+	}
+	logger.Debugf("retrieved %d logs", len(res))
+	return res, nil
 }
