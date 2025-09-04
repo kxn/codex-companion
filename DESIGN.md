@@ -5,8 +5,11 @@ Codex Companion is a Go application that lets a single user route all Codex/Open
 
 Two account types are supported:
 
-* **API key accounts** – traditional Codex/OpenAI keys.
-* **ChatGPT-login accounts** – accounts authenticated via ChatGPT's OAuth flow that yield a refresh token. The proxy exchanges the refresh token for short‑lived access tokens automatically (see the OAuth flow in <https://github.com/openai/codex> for reference). The upstream repository defines the OAuth client ID `app_EMoamEEZ73f0CkXaXp7hrann` and uses scopes `openid profile email offline_access` for the initial login; refresh requests reuse the same client ID with scope `openid profile email`.
+* **API key accounts** – traditional Codex/OpenAI keys. Each account can
+  optionally specify its own upstream `BaseURL`; if omitted the proxy uses the
+  default OpenAI host `https://api.openai.com` and forwards client paths like
+  `/v1/responses` as-is.
+* **ChatGPT-login accounts** – accounts authenticated via ChatGPT's OAuth flow that yield a refresh token. The proxy exchanges the refresh token for short‑lived access tokens automatically (see the OAuth flow in <https://github.com/openai/codex> for reference). These requests are sent to `https://chatgpt.com/backend-api/codex` with the leading `/v1` stripped from the client path. The upstream repository defines the OAuth client ID `app_EMoamEEZ73f0CkXaXp7hrann` and uses scopes `openid profile email offline_access` for the initial login; refresh requests reuse the same client ID with scope `openid profile email`.
 
 A single HTTP server binds to `127.0.0.1:8080`. Requests not starting with `/admin` are proxied to the upstream Codex service. The Web UI and management API live under `/admin` on the same port. Because the server only listens on localhost, the Web UI does not implement authentication.
 
@@ -47,8 +50,15 @@ internal/
    - background goroutine checks `ResetAt` and reactivates accounts.
 5. Implement `internal/proxy`:
    - `ServeHTTP(w http.ResponseWriter, r *http.Request)` chooses account via scheduler.
-   - for API key accounts replace `Authorization` header with `Bearer <account.APIKey>`.
-   - for ChatGPT accounts use `Bearer <account.AccessToken>`.
+  - forward only Codex API calls. Based on the upstream CLI implementation,
+    valid paths are `/v1/responses`, `/v1/chat/completions`, and `/v1/models`.
+    Any other path should return `404` without hitting the upstream service.
+  - for API key accounts replace `Authorization` header with `Bearer <account.APIKey>`
+    and allow an optional account‑specific `BaseURL` to override the default
+    upstream when forwarding requests.
+  - for ChatGPT accounts use `Bearer <account.AccessToken>`, forward to
+    `https://chatgpt.com/backend-api/codex`, and strip the leading `/v1` from
+    the request path.
    - forward the request using `http.Transport`.
    - log request and response through the log package.
 6. Implement `internal/webui`:
@@ -69,7 +79,8 @@ internal/
 
 ## Components
 1. **Account Manager**
-   - Stores account type, display name, priority, OAuth or API key credentials, exhaustion status, and reset time.
+   - Stores account type, display name, priority, OAuth or API key credentials,
+     optional API key `BaseURL`, exhaustion status, and reset time.
    - Persists data using SQLite via the pure Go driver `modernc.org/sqlite`.
    - Provides CRUD operations for both API key and ChatGPT-login accounts.
 

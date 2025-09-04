@@ -37,7 +37,7 @@ func main() {
 	sched.StartReactivator(ctx, time.Minute)
 
 	adminHandler := webui.AdminHandler(am, ls)
-	proxyHandler := proxy.New(sched, ls, "https://api.openai.com")
+	proxyHandler := proxy.New(sched, ls, "https://api.openai.com", "https://chatgpt.com/backend-api/codex")
 
 	mux := http.NewServeMux()
 	mux.Handle("/admin/", adminHandler)

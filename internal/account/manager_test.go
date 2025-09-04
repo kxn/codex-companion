@@ -28,7 +28,7 @@ func TestAddAndGet(t *testing.T) {
 		t.Fatalf("new manager: %v", err)
 	}
 	ctx := context.Background()
-	a1, err := mgr.AddAPIKey(ctx, "a1", "k1", 1)
+	a1, err := mgr.AddAPIKey(ctx, "a1", "k1", "", 1)
 	if err != nil {
 		t.Fatalf("add api: %v", err)
 	}
@@ -57,8 +57,8 @@ func TestListOrderUpdateDelete(t *testing.T) {
 	db := setupTestDB(t)
 	mgr, _ := NewManager(db)
 	ctx := context.Background()
-	a1, _ := mgr.AddAPIKey(ctx, "a1", "k1", 2)
-	a2, _ := mgr.AddAPIKey(ctx, "a2", "k2", 1)
+	a1, _ := mgr.AddAPIKey(ctx, "a1", "k1", "", 2)
+	a2, _ := mgr.AddAPIKey(ctx, "a2", "k2", "", 1)
 	list, err := mgr.List(ctx)
 	if err != nil {
 		t.Fatalf("list: %v", err)
@@ -90,10 +90,10 @@ func TestDuplicate(t *testing.T) {
 	mgr, _ := NewManager(db)
 	ctx := context.Background()
 
-	if _, err := mgr.AddAPIKey(ctx, "a1", "k1", 0); err != nil {
+	if _, err := mgr.AddAPIKey(ctx, "a1", "k1", "", 0); err != nil {
 		t.Fatalf("add api: %v", err)
 	}
-	if _, err := mgr.AddAPIKey(ctx, "a2", "k1", 0); !errors.Is(err, ErrDuplicate) {
+	if _, err := mgr.AddAPIKey(ctx, "a2", "k1", "", 0); !errors.Is(err, ErrDuplicate) {
 		t.Fatalf("expected duplicate api key error, got %v", err)
 	}
 
@@ -109,7 +109,7 @@ func TestExhaustReactivate(t *testing.T) {
 	db := setupTestDB(t)
 	mgr, _ := NewManager(db)
 	ctx := context.Background()
-	a, _ := mgr.AddAPIKey(ctx, "a", "k", 1)
+	a, _ := mgr.AddAPIKey(ctx, "a", "k", "", 1)
 	reset := time.Now().Add(time.Hour)
 	if err := mgr.MarkExhausted(ctx, a.ID, reset); err != nil {
 		t.Fatalf("mark: %v", err)

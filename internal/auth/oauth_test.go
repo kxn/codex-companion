@@ -107,7 +107,7 @@ func TestRefreshAPIKey(t *testing.T) {
 	db, _ := sql.Open("sqlite", "file:auth2?mode=memory&cache=shared")
 	mgr, _ := account.NewManager(db)
 	ctx := context.Background()
-	a, _ := mgr.AddAPIKey(ctx, "a", "k", 1)
+	a, _ := mgr.AddAPIKey(ctx, "a", "k", "", 1)
 	defer swapClient(roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		t.Fatalf("should not call")
 		return nil, nil

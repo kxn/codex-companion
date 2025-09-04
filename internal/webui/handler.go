@@ -44,6 +44,7 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 				Type         string `json:"type"`
 				Name         string `json:"name"`
 				APIKey       string `json:"api_key"`
+				BaseURL      string `json:"base_url"`
 				RefreshToken string `json:"refresh_token"`
 				AccountID    string `json:"account_id"`
 				Priority     int    `json:"priority"`
@@ -56,7 +57,7 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 			var a *account.Account
 			var err error
 			if req.Type == "api_key" {
-				a, err = am.AddAPIKey(ctx, req.Name, req.APIKey, req.Priority)
+				a, err = am.AddAPIKey(ctx, req.Name, req.APIKey, req.BaseURL, req.Priority)
 			} else if req.Type == "chatgpt" {
 				a, err = am.AddChatGPT(ctx, req.Name, req.RefreshToken, req.AccountID, req.Priority)
 			} else {

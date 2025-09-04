@@ -42,8 +42,8 @@ func swap(rt http.RoundTripper) func() {
 func TestNextSelectsHighestPriority(t *testing.T) {
 	s, mgr := setupScheduler(t)
 	ctx := context.Background()
-	a1, _ := mgr.AddAPIKey(ctx, "a1", "k1", 1)
-	_, _ = mgr.AddAPIKey(ctx, "a2", "k2", 2)
+	a1, _ := mgr.AddAPIKey(ctx, "a1", "k1", "", 1)
+	_, _ = mgr.AddAPIKey(ctx, "a2", "k2", "", 2)
 	got, err := s.Next(ctx)
 	if err != nil || got.ID != a1.ID {
 		t.Fatalf("unexpected: %+v %v", got, err)
@@ -53,8 +53,8 @@ func TestNextSelectsHighestPriority(t *testing.T) {
 func TestNextSkipsExhausted(t *testing.T) {
 	s, mgr := setupScheduler(t)
 	ctx := context.Background()
-	a1, _ := mgr.AddAPIKey(ctx, "a1", "k1", 1)
-	a2, _ := mgr.AddAPIKey(ctx, "a2", "k2", 2)
+	a1, _ := mgr.AddAPIKey(ctx, "a1", "k1", "", 1)
+	a2, _ := mgr.AddAPIKey(ctx, "a2", "k2", "", 2)
 	mgr.MarkExhausted(ctx, a1.ID, time.Now().Add(time.Hour))
 	got, err := s.Next(ctx)
 	if err != nil || got.ID != a2.ID {
@@ -68,7 +68,7 @@ func TestNextRefreshFailureFallback(t *testing.T) {
 	cg, _ := mgr.AddChatGPT(ctx, "cg", "rt", "", 1)
 	cg.TokenExpiresAt = time.Now().Add(-time.Minute)
 	mgr.Update(ctx, cg)
-	ak, _ := mgr.AddAPIKey(ctx, "a", "k", 2)
+	ak, _ := mgr.AddAPIKey(ctx, "a", "k", "", 2)
 	defer swap(rtFunc(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{StatusCode: 500, Body: io.NopCloser(strings.NewReader("")), Header: make(http.Header)}, nil
 	}))()
@@ -104,7 +104,7 @@ func TestNextRefreshesChatGPT(t *testing.T) {
 func TestReactivate(t *testing.T) {
 	s, mgr := setupScheduler(t)
 	ctx := context.Background()
-	a, _ := mgr.AddAPIKey(ctx, "a", "k", 1)
+	a, _ := mgr.AddAPIKey(ctx, "a", "k", "", 1)
 	mgr.MarkExhausted(ctx, a.ID, time.Now().Add(-time.Minute))
 	s.reactivate(ctx)
 	got, _ := mgr.Get(ctx, a.ID)
@@ -116,7 +116,7 @@ func TestReactivate(t *testing.T) {
 func TestMarkExhausted(t *testing.T) {
 	s, mgr := setupScheduler(t)
 	ctx := context.Background()
-	a, _ := mgr.AddAPIKey(ctx, "a", "k", 1)
+	a, _ := mgr.AddAPIKey(ctx, "a", "k", "", 1)
 	reset := time.Now().Add(time.Hour)
 	s.MarkExhausted(ctx, a.ID, reset)
 	got, _ := mgr.Get(ctx, a.ID)
@@ -129,7 +129,7 @@ func TestStartReactivator(t *testing.T) {
 	s, mgr := setupScheduler(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	a, _ := mgr.AddAPIKey(ctx, "a", "k", 1)
+	a, _ := mgr.AddAPIKey(ctx, "a", "k", "", 1)
 	mgr.MarkExhausted(ctx, a.ID, time.Now().Add(-time.Minute))
 	s.StartReactivator(ctx, 10*time.Millisecond)
 	time.Sleep(50 * time.Millisecond)
