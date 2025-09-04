@@ -64,7 +64,7 @@ func Refresh(ctx context.Context, mgr *account.Manager, a *account.Account) erro
 	if time.Until(a.TokenExpiresAt) > time.Minute {
 		return nil
 	}
-	token, rt, expiresIn, err := ExchangeRefreshToken(ctx, a.RefreshToken)
+	token, rt, _, err := ExchangeRefreshToken(ctx, a.RefreshToken)
 	if err != nil {
 		logger.Errorf("exchange refresh token failed: %v", err)
 		return err
@@ -73,6 +73,10 @@ func Refresh(ctx context.Context, mgr *account.Manager, a *account.Account) erro
 	if rt != "" {
 		a.RefreshToken = rt
 	}
-	a.TokenExpiresAt = time.Now().Add(expiresIn)
+	// Codex keeps using the existing access token for up to 28 days before
+	// attempting a refresh. We mirror that behavior by always extending the
+	// expiry 28 days into the future whenever a refresh succeeds, ignoring
+	// the short-lived "expires_in" value returned by the OAuth endpoint.
+	a.TokenExpiresAt = time.Now().Add(28 * 24 * time.Hour)
 	return mgr.Update(ctx, a)
 }

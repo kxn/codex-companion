@@ -56,7 +56,7 @@ func TestImportAuth(t *testing.T) {
 	_, _, h := setupWebUI(t)
 	dir := t.TempDir()
 	t.Setenv("CODEX_HOME", dir)
-	data := `{"tokens":{"refresh_token":"rt"}}`
+	data := `{"tokens":{"refresh_token":"rt","access_token":"at"},"last_refresh":"2024-01-01T00:00:00Z"}`
 	if err := os.WriteFile(filepath.Join(dir, "auth.json"), []byte(data), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -67,8 +67,12 @@ func TestImportAuth(t *testing.T) {
 		t.Fatalf("status %d", rec.Code)
 	}
 	var a account.Account
-	if err := json.NewDecoder(rec.Body).Decode(&a); err != nil || a.RefreshToken != "rt" {
+	if err := json.NewDecoder(rec.Body).Decode(&a); err != nil || a.RefreshToken != "rt" || a.AccessToken != "at" {
 		t.Fatalf("decode: %v %+v", err, a)
+	}
+	expected := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).Add(28 * 24 * time.Hour)
+	if !a.TokenExpiresAt.Equal(expected) {
+		t.Fatalf("expires_at %v", a.TokenExpiresAt)
 	}
 
 	t.Setenv("CODEX_HOME", filepath.Join(dir, "missing"))
