@@ -39,6 +39,19 @@ func setupWebUI(t *testing.T) (*account.Manager, *logpkg.Store, http.Handler) {
 	return mgr, ls, h
 }
 
+func TestStaticIndex(t *testing.T) {
+	_, _, h := setupWebUI(t)
+	req := httptest.NewRequest(http.MethodGet, "/admin/", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Codex Companion") {
+		t.Fatalf("body: %s", rec.Body.String())
+	}
+}
+
 func TestImportAuth(t *testing.T) {
 	_, _, h := setupWebUI(t)
 	dir := t.TempDir()

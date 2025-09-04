@@ -22,6 +22,8 @@
 - **Next 选择**：返回优先级最高且未耗尽的账号。
 - **跳过耗尽账号**：`MarkExhausted` 后 `Next` 应跳过。
 - **刷新失败回退**：ChatGPT 账号刷新失败时使用后备账号。
+- **刷新成功**：当 ChatGPT 账号需要刷新时，`Next` 调用 `Refresh` 并返回更新后的账号。
+- **MarkExhausted**：`MarkExhausted` 将账号标记为耗尽并记录 `ResetAt`。
 - **reactivate**：当 `ResetAt` 已过期时，`reactivate` 重新激活账号。
 - **StartReactivator**：调用 `StartReactivator` 后后台任务会自动激活到期账号。
 
@@ -35,6 +37,7 @@
 - **ImportAuth**：读取 `CODEX_HOME/auth.json` 并创建 ChatGPT 账号；缺失文件时报错。
 - **Accounts API**：`GET/POST/PUT/DELETE /api/accounts` 实现账号的增删改查。
 - **Logs API**：`GET /api/logs` 返回持久化的请求日志。
+- **静态页面**：`GET /admin` 返回嵌入的 `index.html`。
 
 ## 运行方式
 执行 `go test ./...` 运行全部单元测试。

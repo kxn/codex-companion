@@ -78,6 +78,29 @@ func TestNextRefreshFailureFallback(t *testing.T) {
 	}
 }
 
+func TestNextRefreshesChatGPT(t *testing.T) {
+	s, mgr := setupScheduler(t)
+	ctx := context.Background()
+	cg, _ := mgr.AddChatGPT(ctx, "cg", "rt", 1)
+	cg.TokenExpiresAt = time.Now().Add(-time.Minute)
+	mgr.Update(ctx, cg)
+	defer swap(rtFunc(func(r *http.Request) (*http.Response, error) {
+		body := `{"access_token":"new","expires_in":60}`
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	}))()
+	got, err := s.Next(ctx)
+	if err != nil || got.ID != cg.ID {
+		t.Fatalf("expected chatgpt account, got %+v %v", got, err)
+	}
+	if got.AccessToken != "new" {
+		t.Fatalf("token not refreshed: %+v", got)
+	}
+	stored, _ := mgr.Get(ctx, cg.ID)
+	if stored.AccessToken != "new" {
+		t.Fatalf("db not updated: %+v", stored)
+	}
+}
+
 func TestReactivate(t *testing.T) {
 	s, mgr := setupScheduler(t)
 	ctx := context.Background()
