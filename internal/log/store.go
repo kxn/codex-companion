@@ -17,9 +17,12 @@ type RequestLog struct {
 	URL        string
 	ReqHeader  http.Header
 	ReqBody    string
+	ReqSize    int
 	RespHeader http.Header
 	RespBody   string
+	RespSize   int
 	Status     int
+	DurationMs int64
 	Error      string
 }
 
@@ -46,9 +49,12 @@ func (s *Store) init() error {
         url TEXT,
         req_header BLOB,
        req_body TEXT,
+       req_size INTEGER,
        resp_header BLOB,
        resp_body TEXT,
+       resp_size INTEGER,
         status INTEGER,
+        duration_ms INTEGER,
         error TEXT
     )`
 	_, err := s.db.Exec(query)
@@ -59,14 +65,14 @@ func (s *Store) init() error {
 func (s *Store) Insert(ctx context.Context, rl *RequestLog) error {
 	reqHeader, _ := json.Marshal(rl.ReqHeader)
 	respHeader, _ := json.Marshal(rl.RespHeader)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO logs(time, account_id, method, url, req_header, req_body, resp_header, resp_body, status, error) VALUES(?,?,?,?,?,?,?,?,?,?)`,
-		rl.Time, rl.AccountID, rl.Method, rl.URL, reqHeader, rl.ReqBody, respHeader, rl.RespBody, rl.Status, rl.Error)
+	_, err := s.db.ExecContext(ctx, `INSERT INTO logs(time, account_id, method, url, req_header, req_body, req_size, resp_header, resp_body, resp_size, status, duration_ms, error) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		rl.Time, rl.AccountID, rl.Method, rl.URL, reqHeader, rl.ReqBody, rl.ReqSize, respHeader, rl.RespBody, rl.RespSize, rl.Status, rl.DurationMs, rl.Error)
 	return err
 }
 
 // List returns latest logs limited by n with offset.
 func (s *Store) List(ctx context.Context, n, offset int) ([]*RequestLog, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, time, account_id, method, url, req_header, req_body, resp_header, resp_body, status, error FROM logs ORDER BY id DESC LIMIT ? OFFSET ?`, n, offset)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, time, account_id, method, url, req_header, req_body, req_size, resp_header, resp_body, resp_size, status, duration_ms, error FROM logs ORDER BY id DESC LIMIT ? OFFSET ?`, n, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +81,7 @@ func (s *Store) List(ctx context.Context, n, offset int) ([]*RequestLog, error) 
 	for rows.Next() {
 		var rl RequestLog
 		var reqHeader, respHeader []byte
-		if err := rows.Scan(&rl.ID, &rl.Time, &rl.AccountID, &rl.Method, &rl.URL, &reqHeader, &rl.ReqBody, &respHeader, &rl.RespBody, &rl.Status, &rl.Error); err != nil {
+		if err := rows.Scan(&rl.ID, &rl.Time, &rl.AccountID, &rl.Method, &rl.URL, &reqHeader, &rl.ReqBody, &rl.ReqSize, &respHeader, &rl.RespBody, &rl.RespSize, &rl.Status, &rl.DurationMs, &rl.Error); err != nil {
 			return nil, err
 		}
 		json.Unmarshal(reqHeader, &rl.ReqHeader)
