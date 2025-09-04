@@ -33,9 +33,9 @@ func TestInsertList(t *testing.T) {
 		Method:     "GET",
 		URL:        "u1",
 		ReqHeader:  http.Header{"A": {"1"}},
-		ReqBody:    []byte("req1"),
+		ReqBody:    "req1",
 		RespHeader: http.Header{"X": {"1"}},
-		RespBody:   []byte("resp1"),
+		RespBody:   "resp1",
 		Status:     200,
 	}
 	rl2 := &RequestLog{
@@ -44,9 +44,9 @@ func TestInsertList(t *testing.T) {
 		Method:     "POST",
 		URL:        "u2",
 		ReqHeader:  http.Header{"B": {"2"}},
-		ReqBody:    []byte("req2"),
+		ReqBody:    "req2",
 		RespHeader: http.Header{"Y": {"2"}},
-		RespBody:   []byte("resp2"),
+		RespBody:   "resp2",
 		Status:     500,
 	}
 	rl3 := &RequestLog{
@@ -55,9 +55,9 @@ func TestInsertList(t *testing.T) {
 		Method:     "DELETE",
 		URL:        "u3",
 		ReqHeader:  http.Header{"C": {"3"}},
-		ReqBody:    []byte("req3"),
+		ReqBody:    "req3",
 		RespHeader: http.Header{"Z": {"3"}},
-		RespBody:   []byte("resp3"),
+		RespBody:   "resp3",
 		Status:     201,
 	}
 	for i, rl := range []*RequestLog{rl1, rl2, rl3} {
@@ -72,7 +72,7 @@ func TestInsertList(t *testing.T) {
 	if len(logs) != 2 || logs[0].ID <= logs[1].ID {
 		t.Fatalf("unexpected order: %+v", logs)
 	}
-	if logs[0].ReqHeader.Get("C") != "3" || string(logs[0].ReqBody) != "req3" || logs[0].RespHeader.Get("Z") != "3" || string(logs[0].RespBody) != "resp3" {
+	if logs[0].ReqHeader.Get("C") != "3" || logs[0].ReqBody != "req3" || logs[0].RespHeader.Get("Z") != "3" || logs[0].RespBody != "resp3" {
 		t.Fatalf("log fields not restored: %+v", logs[0])
 	}
 }
