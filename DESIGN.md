@@ -41,8 +41,8 @@ internal/
    - Account table includes columns for `type`, `api_key`, `refresh_token`, `access_token`, and `token_expires_at`.
    - CRUD functions: `List`, `AddAPIKey`, `AddChatGPT`, `Update`, `Delete`, `MarkExhausted`, `Reactivate`.
    - ChatGPT accounts require a refresh token obtained via the `codex login` CLI from the upstream repository or manual OAuth steps; the proxy does **not** implement the interactive login flow.
-   - `auth.ExchangeRefreshToken(rt string)` posts to `https://auth.openai.com/oauth/token` with `client_id=app_EMoamEEZ73f0CkXaXp7hrann`, `grant_type=refresh_token`, `scope=openid profile email`, and returns `{access_token, expires_in}`.
-   - `auth.Refresh(a *Account)` updates access token if it expires within the next minute.
+   - `auth.ExchangeRefreshToken(rt string)` posts to `https://auth.openai.com/oauth/token` with `client_id=app_EMoamEEZ73f0CkXaXp7hrann`, `grant_type=refresh_token`, `scope=openid profile email`, and returns `{access_token, refresh_token, expires_in}`.
+   - `auth.Refresh(a *Account)` updates access token if it expires within the next minute and persists a rotated refresh token when provided.
 3. Implement `internal/log` for request log table with `Insert` and `List` functions.
 4. Implement `internal/scheduler`:
    - maintain slice of active accounts ordered by `Priority`.
@@ -94,7 +94,7 @@ internal/
 2. **Auth (OAuth Token Refresher)**
    - Exchanges ChatGPT refresh tokens for access tokens using the shared client ID `app_EMoamEEZ73f0CkXaXp7hrann`.
    - Initial login (outside the proxy) must request scopes `openid profile email offline_access`; refresh requests use scope `openid profile email`.
-   - Caches the `access_token` and `expires_in` for each account and refreshes tokens when they are within one minute of expiry.
+   - Caches the `access_token` and `expires_in` for each account and refreshes tokens when they are within one minute of expiry, updating the stored `refresh_token` if the server rotates it.
 
 3. **Scheduler**
    - Keeps ordered list of active accounts by priority (lower number = higher priority).
