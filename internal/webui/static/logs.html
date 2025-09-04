@@ -3,8 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <title>Logs - Codex Companion</title>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<main>
 <h1>Logs</h1>
 <nav><a href="index.html">Accounts</a> | <a href="logs.html">Logs</a></nav>
 <table id="logs">
@@ -14,9 +16,10 @@
   <tbody></tbody>
 </table>
 <dialog id="logModal">
-  <button id="closeModal" style="float:right">X</button>
+  <button id="closeModal">X</button>
   <pre id="logDetail"></pre>
 </dialog>
+</main>
 <script>
 async function loadLogs() {
   const res = await fetch('/admin/api/logs');
