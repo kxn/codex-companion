@@ -114,16 +114,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				req.Header.Set("chatgpt-account-id", account.AccountID)
 			}
 		}
+		start := time.Now()
 		resp, err := h.Client.Do(req)
 		if err != nil {
 			h.Log.Insert(ctx, &log.RequestLog{
-				Time:      time.Now(),
-				AccountID: account.ID,
-				Method:    r.Method,
-				URL:       r.URL.String(),
-				ReqHeader: r.Header.Clone(),
-				ReqBody:   string(reqBody),
-				Error:     err.Error(),
+				Time:       time.Now(),
+				AccountID:  account.ID,
+				Method:     r.Method,
+				URL:        r.URL.String(),
+				ReqHeader:  r.Header.Clone(),
+				ReqBody:    string(reqBody),
+				ReqSize:    len(reqBody),
+				RespSize:   0,
+				Status:     0,
+				DurationMs: time.Since(start).Milliseconds(),
+				Error:      err.Error(),
 			})
 			if attempts == 2 {
 				http.Error(w, "upstream error", http.StatusBadGateway)
@@ -133,6 +138,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		defer resp.Body.Close()
 		respBody, _ := io.ReadAll(resp.Body)
+		duration := time.Since(start)
 
 		// log
 		h.Log.Insert(ctx, &log.RequestLog{
@@ -142,9 +148,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			URL:        r.URL.String(),
 			ReqHeader:  r.Header.Clone(),
 			ReqBody:    string(reqBody),
+			ReqSize:    len(reqBody),
 			RespHeader: resp.Header.Clone(),
 			RespBody:   string(respBody),
+			RespSize:   len(respBody),
 			Status:     resp.StatusCode,
+			DurationMs: duration.Milliseconds(),
 		})
 
 		if resp.StatusCode == http.StatusTooManyRequests {

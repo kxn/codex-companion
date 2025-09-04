@@ -168,8 +168,12 @@ func TestLogsAPI(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("logs status: %d", rec.Code)
 	}
-	var logs []logpkg.RequestLog
-	if err := json.NewDecoder(rec.Body).Decode(&logs); err != nil || len(logs) != 1 || logs[0].Method != "GET" {
-		t.Fatalf("logs decode: %v %+v", err, logs)
+	var res struct {
+		Logs    []logpkg.RequestLog `json:"logs"`
+		Page    int                 `json:"page"`
+		HasMore bool                `json:"has_more"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&res); err != nil || len(res.Logs) != 1 || res.Logs[0].Method != "GET" || res.Page != 1 || res.HasMore {
+		t.Fatalf("logs decode: %v %+v", err, res)
 	}
 }

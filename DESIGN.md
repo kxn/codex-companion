@@ -174,9 +174,12 @@ type RequestLog struct {
     URL        string
     ReqHeader  http.Header
     ReqBody    string
+    ReqSize    int
     RespHeader http.Header
     RespBody   string
+    RespSize   int
     Status     int
+    DurationMs int64
     Error      string
 }
 ```

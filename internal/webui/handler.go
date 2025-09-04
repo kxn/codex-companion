@@ -157,12 +157,21 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 			size = 100
 		}
 		offset := (page - 1) * size
-		logs, err := ls.List(ctx, size, offset)
+		logs, err := ls.List(ctx, size+1, offset)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		json.NewEncoder(w).Encode(logs)
+		hasMore := false
+		if len(logs) > size {
+			hasMore = true
+			logs = logs[:size]
+		}
+		json.NewEncoder(w).Encode(struct {
+			Logs    []*logpkg.RequestLog `json:"logs"`
+			Page    int                  `json:"page"`
+			HasMore bool                 `json:"has_more"`
+		}{logs, page, hasMore})
 	})
 
 	return http.StripPrefix("/admin", mux)

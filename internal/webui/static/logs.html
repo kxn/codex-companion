@@ -30,9 +30,13 @@
 let page = 1;
 let auto = false;
 let timer;
+let hasMore = false;
 async function loadLogs() {
   const res = await fetch(`/admin/api/logs?page=${page}`);
-  const logs = await res.json();
+  const data = await res.json();
+  const logs = data.logs;
+  hasMore = data.has_more;
+  page = data.page;
   const tbody = document.querySelector('#logs tbody');
   tbody.innerHTML = '';
   logs.forEach(l => {
@@ -51,10 +55,12 @@ async function loadLogs() {
     tbody.appendChild(tr);
   });
   document.getElementById('pageInfo').textContent = `Page ${page}`;
+  document.getElementById('prevPage').disabled = page <= 1;
+  document.getElementById('nextPage').disabled = !hasMore;
 }
 
 document.getElementById('prevPage').onclick = () => { if(page>1){ page--; loadLogs(); }};
-document.getElementById('nextPage').onclick = () => { page++; loadLogs(); };
+document.getElementById('nextPage').onclick = () => { if(hasMore){ page++; loadLogs(); }};
 const refreshBtn = document.getElementById('toggleRefresh');
 refreshBtn.onclick = () => {
   auto = !auto;
