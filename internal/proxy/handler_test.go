@@ -207,3 +207,21 @@ func TestServeHTTPAccountBaseURL(t *testing.T) {
 		t.Fatalf("default upstream was called")
 	}
 }
+
+func TestServeHTTPAPIKeyBaseWithVersion(t *testing.T) {
+	h, mgr, _ := setupProxy(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v4/responses" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
+		io.WriteString(w, "ok")
+	})
+	h.UpstreamAPI = h.UpstreamAPI + "/v4"
+	ctx := context.Background()
+	mgr.AddAPIKey(ctx, "a", "k", "", 1)
+	req := httptest.NewRequest("GET", "http://localhost/v1/responses", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || rec.Body.String() != "ok" {
+		t.Fatalf("unexpected resp %d %s", rec.Code, rec.Body.String())
+	}
+}
