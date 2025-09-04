@@ -24,6 +24,7 @@ type Account struct {
 	Name           string      `json:"name"`
 	Type           AccountType `json:"type"`
 	APIKey         string      `json:"api_key"`
+	BaseURL        string      `json:"base_url"`
 	RefreshToken   string      `json:"refresh_token"`
 	AccessToken    string      `json:"access_token"`
 	TokenExpiresAt time.Time   `json:"token_expires_at"`
@@ -51,29 +52,31 @@ func NewManager(db *sql.DB) (*Manager, error) {
 
 func (m *Manager) init() error {
 	query := `CREATE TABLE IF NOT EXISTS accounts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        type INTEGER,
-        api_key TEXT,
-        refresh_token TEXT,
-        access_token TEXT,
-        token_expires_at TIMESTAMP,
-        account_id TEXT,
-        priority INTEGER,
-        exhausted BOOLEAN,
-        reset_at TIMESTAMP
-    )`
+       id INTEGER PRIMARY KEY AUTOINCREMENT,
+       name TEXT,
+       type INTEGER,
+       api_key TEXT,
+       refresh_token TEXT,
+       access_token TEXT,
+       token_expires_at TIMESTAMP,
+       account_id TEXT,
+       base_url TEXT,
+       priority INTEGER,
+       exhausted BOOLEAN,
+       reset_at TIMESTAMP
+   )`
 	if _, err := m.db.Exec(query); err != nil {
 		return err
 	}
 	// Add new column for existing tables; ignore error if already exists.
 	m.db.Exec(`ALTER TABLE accounts ADD COLUMN account_id TEXT`)
+	m.db.Exec(`ALTER TABLE accounts ADD COLUMN base_url TEXT`)
 	return nil
 }
 
 // List returns all accounts ordered by priority.
 func (m *Manager) List(ctx context.Context) ([]*Account, error) {
-	rows, err := m.db.QueryContext(ctx, `SELECT id, account_id, name, type, api_key, refresh_token, access_token, token_expires_at, priority, exhausted, reset_at FROM accounts ORDER BY priority`)
+	rows, err := m.db.QueryContext(ctx, `SELECT id, account_id, name, type, api_key, refresh_token, access_token, token_expires_at, base_url, priority, exhausted, reset_at FROM accounts ORDER BY priority`)
 	if err != nil {
 		return nil, err
 	}
@@ -81,14 +84,17 @@ func (m *Manager) List(ctx context.Context) ([]*Account, error) {
 	var res []*Account
 	for rows.Next() {
 		var a Account
-		var apiKey, refreshToken, accessToken, accountID sql.NullString
+		var apiKey, refreshToken, accessToken, accountID, baseURL sql.NullString
 		var tokenExpiresAt sql.NullTime
 		var resetAt sql.NullTime
-		if err := rows.Scan(&a.ID, &accountID, &a.Name, &a.Type, &apiKey, &refreshToken, &accessToken, &tokenExpiresAt, &a.Priority, &a.Exhausted, &resetAt); err != nil {
+		if err := rows.Scan(&a.ID, &accountID, &a.Name, &a.Type, &apiKey, &refreshToken, &accessToken, &tokenExpiresAt, &baseURL, &a.Priority, &a.Exhausted, &resetAt); err != nil {
 			return nil, err
 		}
 		if apiKey.Valid {
 			a.APIKey = apiKey.String
+		}
+		if baseURL.Valid {
+			a.BaseURL = baseURL.String
 		}
 		if refreshToken.Valid {
 			a.RefreshToken = refreshToken.String
@@ -111,7 +117,7 @@ func (m *Manager) List(ctx context.Context) ([]*Account, error) {
 }
 
 // AddAPIKey adds a new API key account.
-func (m *Manager) AddAPIKey(ctx context.Context, name, key string, priority int) (*Account, error) {
+func (m *Manager) AddAPIKey(ctx context.Context, name, key, baseURL string, priority int) (*Account, error) {
 	logger.Debugf("adding API key account %s priority %d", name, priority)
 	var id int64
 	err := m.db.QueryRowContext(ctx, `SELECT id FROM accounts WHERE api_key=?`, key).Scan(&id)
@@ -123,7 +129,7 @@ func (m *Manager) AddAPIKey(ctx context.Context, name, key string, priority int)
 		return nil, err
 	}
 
-	res, err := m.db.ExecContext(ctx, `INSERT INTO accounts(name, type, api_key, priority, exhausted) VALUES(?, ?, ?, ?, 0)`, name, APIKeyAccount, key, priority)
+	res, err := m.db.ExecContext(ctx, `INSERT INTO accounts(name, type, api_key, base_url, priority, exhausted) VALUES(?, ?, ?, ?, ?, 0)`, name, APIKeyAccount, key, baseURL, priority)
 	if err != nil {
 		logger.Errorf("add API key account failed: %v", err)
 		return nil, err
@@ -134,7 +140,7 @@ func (m *Manager) AddAPIKey(ctx context.Context, name, key string, priority int)
 		return nil, err
 	}
 	logger.Infof("added API key account %d", id)
-	return &Account{ID: id, Name: name, Type: APIKeyAccount, APIKey: key, Priority: priority}, nil
+	return &Account{ID: id, Name: name, Type: APIKeyAccount, APIKey: key, BaseURL: baseURL, Priority: priority}, nil
 }
 
 // AddChatGPT adds a new ChatGPT account using refresh token.
@@ -166,8 +172,8 @@ func (m *Manager) AddChatGPT(ctx context.Context, name, refreshToken, accountID 
 
 // Update updates an existing account.
 func (m *Manager) Update(ctx context.Context, a *Account) error {
-	_, err := m.db.ExecContext(ctx, `UPDATE accounts SET name=?, type=?, api_key=?, refresh_token=?, access_token=?, token_expires_at=?, account_id=?, priority=?, exhausted=?, reset_at=? WHERE id=?`,
-		a.Name, a.Type, a.APIKey, a.RefreshToken, a.AccessToken, a.TokenExpiresAt, a.AccountID, a.Priority, a.Exhausted, a.ResetAt, a.ID)
+	_, err := m.db.ExecContext(ctx, `UPDATE accounts SET name=?, type=?, api_key=?, refresh_token=?, access_token=?, token_expires_at=?, account_id=?, base_url=?, priority=?, exhausted=?, reset_at=? WHERE id=?`,
+		a.Name, a.Type, a.APIKey, a.RefreshToken, a.AccessToken, a.TokenExpiresAt, a.AccountID, a.BaseURL, a.Priority, a.Exhausted, a.ResetAt, a.ID)
 	return err
 }
 
@@ -197,12 +203,12 @@ func (m *Manager) Reactivate(ctx context.Context, id int64) error {
 
 // Get retrieves account by id.
 func (m *Manager) Get(ctx context.Context, id int64) (*Account, error) {
-	row := m.db.QueryRowContext(ctx, `SELECT id, account_id, name, type, api_key, refresh_token, access_token, token_expires_at, priority, exhausted, reset_at FROM accounts WHERE id=?`, id)
+	row := m.db.QueryRowContext(ctx, `SELECT id, account_id, name, type, api_key, refresh_token, access_token, token_expires_at, base_url, priority, exhausted, reset_at FROM accounts WHERE id=?`, id)
 	var a Account
-	var apiKey, refreshToken, accessToken, accountID sql.NullString
+	var apiKey, refreshToken, accessToken, accountID, baseURL sql.NullString
 	var tokenExpiresAt sql.NullTime
 	var resetAt sql.NullTime
-	if err := row.Scan(&a.ID, &accountID, &a.Name, &a.Type, &apiKey, &refreshToken, &accessToken, &tokenExpiresAt, &a.Priority, &a.Exhausted, &resetAt); err != nil {
+	if err := row.Scan(&a.ID, &accountID, &a.Name, &a.Type, &apiKey, &refreshToken, &accessToken, &tokenExpiresAt, &baseURL, &a.Priority, &a.Exhausted, &resetAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
@@ -210,6 +216,9 @@ func (m *Manager) Get(ctx context.Context, id int64) (*Account, error) {
 	}
 	if apiKey.Valid {
 		a.APIKey = apiKey.String
+	}
+	if baseURL.Valid {
+		a.BaseURL = baseURL.String
 	}
 	if refreshToken.Valid {
 		a.RefreshToken = refreshToken.String

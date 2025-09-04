@@ -14,24 +14,37 @@ import (
 
 // Handler implements reverse proxy logic.
 type Handler struct {
-	Scheduler *scheduler.Scheduler
-	Log       *log.Store
-	Upstream  string
-	Client    *http.Client
+	Scheduler       *scheduler.Scheduler
+	Log             *log.Store
+	UpstreamAPI     string
+	UpstreamChatGPT string
+	Client          *http.Client
 }
 
 // New creates a new proxy Handler.
-func New(s *scheduler.Scheduler, l *log.Store, upstream string) *Handler {
+func New(s *scheduler.Scheduler, l *log.Store, apiUpstream, chatgptUpstream string) *Handler {
 	return &Handler{
-		Scheduler: s,
-		Log:       l,
-		Upstream:  upstream,
-		Client:    &http.Client{Timeout: 60 * time.Second},
+		Scheduler:       s,
+		Log:             l,
+		UpstreamAPI:     apiUpstream,
+		UpstreamChatGPT: chatgptUpstream,
+		Client:          &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/admin") {
+		http.NotFound(w, r)
+		return
+	}
+	allowed := false
+	for _, p := range []string{"/v1/responses", "/v1/chat/completions", "/v1/models"} {
+		if strings.HasPrefix(r.URL.Path, p) {
+			allowed = true
+			break
+		}
+	}
+	if !allowed {
 		http.NotFound(w, r)
 		return
 	}
@@ -50,7 +63,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		upstreamURL := h.Upstream + r.URL.Path
+		base := h.UpstreamAPI
+		path := r.URL.Path
+		if account.Type == acct.APIKeyAccount {
+			if account.BaseURL != "" {
+				base = account.BaseURL
+			}
+		} else {
+			base = h.UpstreamChatGPT
+			path = strings.TrimPrefix(path, "/v1")
+		}
+		upstreamURL := base + path
 		if r.URL.RawQuery != "" {
 			upstreamURL += "?" + r.URL.RawQuery
 		}

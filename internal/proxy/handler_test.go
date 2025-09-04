@@ -34,7 +34,7 @@ func setupProxy(t *testing.T, upstream http.HandlerFunc) (*Handler, *account.Man
 	s := scheduler.New(mgr)
 	srv := httptest.NewServer(upstream)
 	t.Cleanup(srv.Close)
-	h := New(s, ls, srv.URL)
+	h := New(s, ls, srv.URL, srv.URL)
 	return h, mgr, ls
 }
 
@@ -47,8 +47,8 @@ func TestServeHTTPForwardAndLog(t *testing.T) {
 		io.WriteString(w, "ok")
 	})
 	ctx := context.Background()
-	mgr.AddAPIKey(ctx, "a", "k", 1)
-	req := httptest.NewRequest("GET", "http://localhost/test", nil)
+	mgr.AddAPIKey(ctx, "a", "k", "", 1)
+	req := httptest.NewRequest("GET", "http://localhost/v1/responses", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != 200 || rec.Body.String() != "ok" {
@@ -65,8 +65,8 @@ func TestServeHTTP429(t *testing.T) {
 		w.WriteHeader(429)
 	})
 	ctx := context.Background()
-	a, _ := mgr.AddAPIKey(ctx, "a", "k", 1)
-	req := httptest.NewRequest("GET", "http://localhost/test", nil)
+	a, _ := mgr.AddAPIKey(ctx, "a", "k", "", 1)
+	req := httptest.NewRequest("GET", "http://localhost/v1/responses", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != 503 {
@@ -89,9 +89,9 @@ func TestServeHTTPRetryNextAccount(t *testing.T) {
 		io.WriteString(w, "ok")
 	})
 	ctx := context.Background()
-	a1, _ := mgr.AddAPIKey(ctx, "a1", "k1", 1)
-	mgr.AddAPIKey(ctx, "a2", "k2", 2)
-	req := httptest.NewRequest("GET", "http://localhost/test", nil)
+	a1, _ := mgr.AddAPIKey(ctx, "a1", "k1", "", 1)
+	mgr.AddAPIKey(ctx, "a2", "k2", "", 2)
+	req := httptest.NewRequest("GET", "http://localhost/v1/responses", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != 200 || rec.Body.String() != "ok" {
@@ -108,6 +108,9 @@ func TestServeHTTPRetryNextAccount(t *testing.T) {
 
 func TestServeHTTPChatGPTAccount(t *testing.T) {
 	h, mgr, _ := setupProxy(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/responses" {
+			t.Fatalf("unexpected path %s", r.URL.Path)
+		}
 		if r.Header.Get("Authorization") != "Bearer at" {
 			w.WriteHeader(401)
 			return
@@ -121,10 +124,45 @@ func TestServeHTTPChatGPTAccount(t *testing.T) {
 	if err := mgr.Update(ctx, a); err != nil {
 		t.Fatalf("update: %v", err)
 	}
-	req := httptest.NewRequest("GET", "http://localhost/test", nil)
+	req := httptest.NewRequest("GET", "http://localhost/v1/responses", nil)
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != 200 || rec.Body.String() != "ok" {
 		t.Fatalf("unexpected resp %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestServeHTTPDisallowedPath(t *testing.T) {
+	h, _, _ := setupProxy(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("should not be called")
+	})
+	req := httptest.NewRequest("GET", "http://localhost/other", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 404 {
+		t.Fatalf("expected 404, got %d", rec.Code)
+	}
+}
+
+func TestServeHTTPAccountBaseURL(t *testing.T) {
+	badCalls := 0
+	h, mgr, _ := setupProxy(t, func(w http.ResponseWriter, r *http.Request) {
+		badCalls++
+		w.WriteHeader(500)
+	})
+	goodSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "ok")
+	}))
+	defer goodSrv.Close()
+	ctx := context.Background()
+	mgr.AddAPIKey(ctx, "a", "k", goodSrv.URL, 1)
+	req := httptest.NewRequest("GET", "http://localhost/v1/responses", nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || rec.Body.String() != "ok" {
+		t.Fatalf("unexpected resp %d %s", rec.Code, rec.Body.String())
+	}
+	if badCalls != 0 {
+		t.Fatalf("default upstream was called")
 	}
 }
