@@ -5,6 +5,7 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
@@ -119,6 +120,35 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 		}
 	})
 
+	mux.HandleFunc("/api/accounts/import/upload", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		file, _, err := r.FormFile("file")
+		if err != nil {
+			logger.Warnf("import auth upload file: %v", err)
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+		data, err := io.ReadAll(file)
+		if err != nil {
+			logger.Errorf("read uploaded auth.json: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		a, err := ImportAuthData(r.Context(), am, data)
+		if err != nil {
+			logger.Errorf("import auth from upload failed: %v", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(a); err != nil {
+			logger.Errorf("encode account failed: %v", err)
+		}
+	})
+
 	mux.HandleFunc("/api/accounts/import", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -223,6 +253,11 @@ func ImportAuth(ctx context.Context, am *account.Manager) (*account.Account, err
 		logger.Errorf("read auth.json: %v", err)
 		return nil, err
 	}
+	return ImportAuthData(ctx, am, data)
+}
+
+// ImportAuthData imports a ChatGPT account from the provided auth.json data.
+func ImportAuthData(ctx context.Context, am *account.Manager, data []byte) (*account.Account, error) {
 	var cfg struct {
 		Tokens struct {
 			RefreshToken string `json:"refresh_token"`

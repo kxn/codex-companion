@@ -20,12 +20,8 @@
   </form>
 
   <h2>Add ChatGPT Account</h2>
-  <form id="chatgptForm">
-    <input name="name" placeholder="Name" required>
-    <input name="refresh_token" placeholder="Refresh Token" required>
-    <button type="submit">Add</button>
-  </form>
-  <button id="importBtn">Import auth.json</button>
+  <button id="uploadBtn">Import auth.json</button>
+  <button id="importBtn">Import local auth.json</button>
 </section>
 
 <section>
@@ -126,37 +122,35 @@ document.getElementById('apiKeyForm').onsubmit = async (e) => {
   loadAccounts();
 };
 
-document.getElementById('chatgptForm').onsubmit = async (e) => {
-  e.preventDefault();
-  const f = new FormData(e.target);
+const uploadInput = document.createElement('input');
+uploadInput.type = 'file';
+uploadInput.accept = 'application/json';
+uploadInput.onchange = async () => {
+  const file = uploadInput.files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file);
   try {
-    const resp = await fetch('/admin/api/accounts', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        type: 'chatgpt',
-        name: f.get('name'),
-        refresh_token: f.get('refresh_token')
-      })
-    });
+    const resp = await fetch('/admin/api/accounts/import/upload', {method: 'POST', body: fd});
     if (!resp.ok) {
-      alert('Add ChatGPT account failed: ' + (await resp.text()));
+      alert('Import auth.json failed: ' + (await resp.text()));
     }
   } catch (e) {
-    console.error('Add ChatGPT account error', e);
+    console.error('Import uploaded auth.json error', e);
   }
-  e.target.reset();
   loadAccounts();
 };
+
+document.getElementById('uploadBtn').onclick = () => uploadInput.click();
 
 document.getElementById('importBtn').onclick = async () => {
   try {
     const resp = await fetch('/admin/api/accounts/import', {method: 'POST'});
     if (!resp.ok) {
-      alert('Import auth.json failed: ' + (await resp.text()));
+      alert('Import local auth.json failed: ' + (await resp.text()));
     }
   } catch (e) {
-    console.error('Import auth.json error', e);
+    console.error('Import local auth.json error', e);
   }
   loadAccounts();
 };
