@@ -70,10 +70,20 @@ func (m *Manager) List(ctx context.Context) ([]*Account, error) {
 	var res []*Account
 	for rows.Next() {
 		var a Account
+		var apiKey, refreshToken, accessToken sql.NullString
 		var tokenExpiresAt sql.NullTime
 		var resetAt sql.NullTime
-		if err := rows.Scan(&a.ID, &a.Name, &a.Type, &a.APIKey, &a.RefreshToken, &a.AccessToken, &tokenExpiresAt, &a.Priority, &a.Exhausted, &resetAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Type, &apiKey, &refreshToken, &accessToken, &tokenExpiresAt, &a.Priority, &a.Exhausted, &resetAt); err != nil {
 			return nil, err
+		}
+		if apiKey.Valid {
+			a.APIKey = apiKey.String
+		}
+		if refreshToken.Valid {
+			a.RefreshToken = refreshToken.String
+		}
+		if accessToken.Valid {
+			a.AccessToken = accessToken.String
 		}
 		if tokenExpiresAt.Valid {
 			a.TokenExpiresAt = tokenExpiresAt.Time
@@ -141,13 +151,23 @@ func (m *Manager) Reactivate(ctx context.Context, id int64) error {
 func (m *Manager) Get(ctx context.Context, id int64) (*Account, error) {
 	row := m.db.QueryRowContext(ctx, `SELECT id, name, type, api_key, refresh_token, access_token, token_expires_at, priority, exhausted, reset_at FROM accounts WHERE id=?`, id)
 	var a Account
+	var apiKey, refreshToken, accessToken sql.NullString
 	var tokenExpiresAt sql.NullTime
 	var resetAt sql.NullTime
-	if err := row.Scan(&a.ID, &a.Name, &a.Type, &a.APIKey, &a.RefreshToken, &a.AccessToken, &tokenExpiresAt, &a.Priority, &a.Exhausted, &resetAt); err != nil {
+	if err := row.Scan(&a.ID, &a.Name, &a.Type, &apiKey, &refreshToken, &accessToken, &tokenExpiresAt, &a.Priority, &a.Exhausted, &resetAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
+	}
+	if apiKey.Valid {
+		a.APIKey = apiKey.String
+	}
+	if refreshToken.Valid {
+		a.RefreshToken = refreshToken.String
+	}
+	if accessToken.Valid {
+		a.AccessToken = accessToken.String
 	}
 	if tokenExpiresAt.Valid {
 		a.TokenExpiresAt = tokenExpiresAt.Time
