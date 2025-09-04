@@ -9,7 +9,7 @@ Two account types are supported:
   optionally specify its own upstream `BaseURL`; if omitted the proxy uses the
   default OpenAI host `https://api.openai.com` and forwards client paths like
   `/v1/responses` as-is.
-* **ChatGPT-login accounts** – accounts authenticated via ChatGPT's OAuth flow that yield a refresh token. The proxy exchanges the refresh token for short‑lived access tokens automatically (see the OAuth flow in <https://github.com/openai/codex> for reference). These requests are sent to `https://chatgpt.com/backend-api/codex` with the leading `/v1` stripped from the client path. The upstream repository defines the OAuth client ID `app_EMoamEEZ73f0CkXaXp7hrann` and uses scopes `openid profile email offline_access` for the initial login; refresh requests reuse the same client ID with scope `openid profile email`.
+* **ChatGPT-login accounts** – accounts authenticated via ChatGPT's OAuth flow that yield both an access token and a refresh token. When importing an account the proxy stores the existing access token and continues using it until 28 days after the last refresh, only exchanging the refresh token at that point (see the OAuth flow in <https://github.com/openai/codex> for reference). These requests are sent to `https://chatgpt.com/backend-api/codex` with the leading `/v1` stripped from the client path. The upstream repository defines the OAuth client ID `app_EMoamEEZ73f0CkXaXp7hrann` and uses scopes `openid profile email offline_access` for the initial login; refresh requests reuse the same client ID with scope `openid profile email`.
 
 A single HTTP server binds to `127.0.0.1:8080`. Requests not starting with `/admin` are proxied to the upstream Codex service. The Web UI and management API live under `/admin` on the same port. Because the server only listens on localhost, the Web UI does not implement authentication.
 
@@ -37,12 +37,12 @@ internal/
 ## Implementation Steps
 1. Run `go mod init codex-companion`.
 2. Implement `internal/account` and `internal/auth`:
-   - `Account` struct stores type, API key or OAuth tokens, priority, exhaustion status, and reset time.
-   - Account table includes columns for `type`, `api_key`, `refresh_token`, `access_token`, and `token_expires_at`.
-   - CRUD functions: `List`, `AddAPIKey`, `AddChatGPT`, `Update`, `Delete`, `MarkExhausted`, `Reactivate`.
-   - ChatGPT accounts require a refresh token obtained via the `codex login` CLI from the upstream repository or manual OAuth steps; the proxy does **not** implement the interactive login flow.
-   - `auth.ExchangeRefreshToken(rt string)` posts to `https://auth.openai.com/oauth/token` with `client_id=app_EMoamEEZ73f0CkXaXp7hrann`, `grant_type=refresh_token`, `scope=openid profile email`, and returns `{access_token, refresh_token, expires_in}`.
-   - `auth.Refresh(a *Account)` updates access token if it expires within the next minute and persists a rotated refresh token when provided.
+  - `Account` struct stores type, API key or OAuth tokens, priority, exhaustion status, and reset time.
+  - Account table includes columns for `type`, `api_key`, `refresh_token`, `access_token`, and `token_expires_at` (used as the "last refresh" time plus 28 days).
+  - CRUD functions: `List`, `AddAPIKey`, `AddChatGPT`, `Update`, `Delete`, `MarkExhausted`, `Reactivate`.
+  - ChatGPT accounts require a refresh token obtained via the `codex login` CLI from the upstream repository or manual OAuth steps; the proxy does **not** implement the interactive login flow.
+  - `auth.ExchangeRefreshToken(rt string)` posts to `https://auth.openai.com/oauth/token` with `client_id=app_EMoamEEZ73f0CkXaXp7hrann`, `grant_type=refresh_token`, `scope=openid profile email`, and returns `{access_token, refresh_token, expires_in}`.
+  - `auth.Refresh(a *Account)` only runs when the stored token is older than 28 days. On success it stores the new access token, optional rotated refresh token, and sets `token_expires_at` to 28 days in the future.
 3. Implement `internal/log` for request log table with `Insert` and `List` functions.
 4. Implement `internal/scheduler`:
    - maintain slice of active accounts ordered by `Priority`.
@@ -73,8 +73,8 @@ internal/
    - static file server for `GET /admin` showing forms to add/remove accounts and view logs.
    - REST API under `/admin/api` called by simple JavaScript:
         - `GET /admin/api/accounts`
-        - `POST /admin/api/accounts` (supports `type="api_key"` or `type="chatgpt"` with `refresh_token`)
-        - `POST /admin/api/accounts/import` to read `$CODEX_HOME/auth.json` (default `~/.codex/auth.json`) and create a ChatGPT account from its refresh token
+        - `POST /admin/api/accounts` (supports `type="api_key"` or `type="chatgpt"` with `refresh_token`, optional `access_token`, and optional `last_refresh`)
+        - `POST /admin/api/accounts/import` to read `$CODEX_HOME/auth.json` (default `~/.codex/auth.json`) and create a ChatGPT account from its refresh and access tokens, using `last_refresh` to delay future refreshes
         - `PUT /admin/api/accounts/{id}`
         - `DELETE /admin/api/accounts/{id}`
         - `GET /admin/api/logs`
@@ -91,10 +91,10 @@ internal/
    - Persists data using SQLite via the pure Go driver `modernc.org/sqlite`.
    - Provides CRUD operations for both API key and ChatGPT-login accounts.
 
-2. **Auth (OAuth Token Refresher)**
-   - Exchanges ChatGPT refresh tokens for access tokens using the shared client ID `app_EMoamEEZ73f0CkXaXp7hrann`.
-   - Initial login (outside the proxy) must request scopes `openid profile email offline_access`; refresh requests use scope `openid profile email`.
-   - Caches the `access_token` and `expires_in` for each account and refreshes tokens when they are within one minute of expiry, updating the stored `refresh_token` if the server rotates it.
+ 2. **Auth (OAuth Token Refresher)**
+    - Exchanges ChatGPT refresh tokens for access tokens using the shared client ID `app_EMoamEEZ73f0CkXaXp7hrann`.
+    - Initial login (outside the proxy) must request scopes `openid profile email offline_access`; refresh requests use scope `openid profile email`.
+    - Stores both `access_token` and `refresh_token` and records the time of the last refresh. Tokens are refreshed only every 28 days, updating the stored `refresh_token` if the server rotates it.
 
 3. **Scheduler**
    - Keeps ordered list of active accounts by priority (lower number = higher priority).
@@ -158,8 +158,8 @@ type Account struct {
     Type           AccountType
     APIKey         string    // for APIKeyAccount
     RefreshToken   string    // for ChatGPTAccount
-    AccessToken    string    // cached short-lived token
-    TokenExpiresAt time.Time // expiry of AccessToken
+    AccessToken    string    // cached access token
+    TokenExpiresAt time.Time // last refresh time plus 28 days
     Priority       int       // smaller value = higher priority
     Exhausted      bool
     ResetAt        time.Time // next time quota is expected to reset
@@ -187,7 +187,7 @@ type RequestLog struct {
 ## Flow of a Proxied Request
 1. Client sends an HTTP request to the local proxy with a simple API key for identification.
 2. Proxy authenticates the client if needed (simple static key) and retrieves the next usable account from the scheduler.
-3. For ChatGPT-login accounts the scheduler ensures a fresh `AccessToken`, refreshing via `auth.Refresh` when necessary.
+3. For ChatGPT-login accounts the scheduler ensures a fresh `AccessToken`, refreshing via `auth.Refresh` only when the stored token is more than 28 days old.
 4. Request headers and body are logged.
 5. Proxy sets `Authorization: Bearer <credential>` where `<credential>` is the account's API key or access token and forwards the request to Codex.
 6. Response is logged and streamed back to the client.

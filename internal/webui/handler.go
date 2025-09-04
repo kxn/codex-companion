@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"codex-companion/internal/account"
 	logpkg "codex-companion/internal/log"
@@ -51,8 +52,10 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 				APIKey       string `json:"api_key"`
 				BaseURL      string `json:"base_url"`
 				RefreshToken string `json:"refresh_token"`
+				AccessToken  string `json:"access_token"`
 				AccountID    string `json:"account_id"`
 				Priority     int    `json:"priority"`
+				LastRefresh  string `json:"last_refresh"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				logger.Warnf("bad add account request: %v", err)
@@ -80,6 +83,20 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 				a, err = am.AddAPIKey(ctx, req.Name, req.APIKey, req.BaseURL, priority)
 			} else if req.Type == "chatgpt" {
 				a, err = am.AddChatGPT(ctx, req.Name, req.RefreshToken, req.AccountID, priority)
+				if err == nil && req.AccessToken != "" {
+					a.AccessToken = req.AccessToken
+					if req.LastRefresh != "" {
+						if t, err := time.Parse(time.RFC3339, req.LastRefresh); err == nil {
+							a.TokenExpiresAt = t.Add(28 * 24 * time.Hour)
+						}
+					}
+					if a.TokenExpiresAt.IsZero() {
+						a.TokenExpiresAt = time.Now().Add(28 * 24 * time.Hour)
+					}
+					if err := am.Update(ctx, a); err != nil {
+						logger.Errorf("update account token: %v", err)
+					}
+				}
 			} else {
 				logger.Warnf("unknown account type %s", req.Type)
 				http.Error(w, "unknown type", http.StatusBadRequest)
@@ -209,8 +226,10 @@ func ImportAuth(ctx context.Context, am *account.Manager) (*account.Account, err
 	var cfg struct {
 		Tokens struct {
 			RefreshToken string `json:"refresh_token"`
+			AccessToken  string `json:"access_token"`
 			AccountID    string `json:"account_id"`
 		} `json:"tokens"`
+		LastRefresh string `json:"last_refresh"`
 	}
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		logger.Errorf("unmarshal auth.json: %v", err)
@@ -234,5 +253,22 @@ func ImportAuth(ctx context.Context, am *account.Manager) (*account.Account, err
 		name = name[:8]
 	}
 	logger.Infof("importing ChatGPT account %s", name)
-	return am.AddChatGPT(ctx, name, cfg.Tokens.RefreshToken, cfg.Tokens.AccountID, priority)
+	a, err := am.AddChatGPT(ctx, name, cfg.Tokens.RefreshToken, cfg.Tokens.AccountID, priority)
+	if err != nil {
+		return nil, err
+	}
+	a.AccessToken = cfg.Tokens.AccessToken
+	if cfg.LastRefresh != "" {
+		if t, err := time.Parse(time.RFC3339, cfg.LastRefresh); err == nil {
+			a.TokenExpiresAt = t.Add(28 * 24 * time.Hour)
+		}
+	}
+	if a.TokenExpiresAt.IsZero() {
+		a.TokenExpiresAt = time.Now().Add(28 * 24 * time.Hour)
+	}
+	if err := am.Update(ctx, a); err != nil {
+		logger.Errorf("update account after import: %v", err)
+		return nil, err
+	}
+	return a, nil
 }
