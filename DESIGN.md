@@ -173,9 +173,9 @@ type RequestLog struct {
     Method     string
     URL        string
     ReqHeader  http.Header
-    ReqBody    []byte
+    ReqBody    string
     RespHeader http.Header
-    RespBody   []byte
+    RespBody   string
     Status     int
     Error      string
 }

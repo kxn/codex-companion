@@ -122,7 +122,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Method:    r.Method,
 				URL:       r.URL.String(),
 				ReqHeader: r.Header.Clone(),
-				ReqBody:   body,
+				ReqBody:   string(reqBody),
 				Error:     err.Error(),
 			})
 			if attempts == 2 {
@@ -141,9 +141,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Method:     r.Method,
 			URL:        r.URL.String(),
 			ReqHeader:  r.Header.Clone(),
-			ReqBody:    body,
+			ReqBody:    string(reqBody),
 			RespHeader: resp.Header.Clone(),
-			RespBody:   respBody,
+			RespBody:   string(respBody),
 			Status:     resp.StatusCode,
 		})
 
