@@ -45,6 +45,7 @@ var ErrDuplicate = errors.New("duplicate account")
 func NewManager(db *sql.DB) (*Manager, error) {
 	m := &Manager{db: db}
 	if err := m.init(); err != nil {
+		logger.Errorf("init accounts table failed: %v", err)
 		return nil, err
 	}
 	return m, nil
@@ -66,6 +67,7 @@ func (m *Manager) init() error {
        reset_at TIMESTAMP
    )`
 	if _, err := m.db.Exec(query); err != nil {
+		logger.Errorf("create accounts table failed: %v", err)
 		return err
 	}
 	// Add new column for existing tables; ignore error if already exists.
@@ -78,6 +80,7 @@ func (m *Manager) init() error {
 func (m *Manager) List(ctx context.Context) ([]*Account, error) {
 	rows, err := m.db.QueryContext(ctx, `SELECT id, account_id, name, type, api_key, refresh_token, access_token, token_expires_at, base_url, priority, exhausted, reset_at FROM accounts ORDER BY priority`)
 	if err != nil {
+		logger.Errorf("query accounts failed: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -88,6 +91,7 @@ func (m *Manager) List(ctx context.Context) ([]*Account, error) {
 		var tokenExpiresAt sql.NullTime
 		var resetAt sql.NullTime
 		if err := rows.Scan(&a.ID, &accountID, &a.Name, &a.Type, &apiKey, &refreshToken, &accessToken, &tokenExpiresAt, &baseURL, &a.Priority, &a.Exhausted, &resetAt); err != nil {
+			logger.Errorf("scan account row failed: %v", err)
 			return nil, err
 		}
 		if apiKey.Valid {
@@ -113,7 +117,11 @@ func (m *Manager) List(ctx context.Context) ([]*Account, error) {
 		}
 		res = append(res, &a)
 	}
-	return res, rows.Err()
+	if err := rows.Err(); err != nil {
+		logger.Errorf("iterate account rows failed: %v", err)
+		return nil, err
+	}
+	return res, nil
 }
 
 // AddAPIKey adds a new API key account.
@@ -172,9 +180,15 @@ func (m *Manager) AddChatGPT(ctx context.Context, name, refreshToken, accountID 
 
 // Update updates an existing account.
 func (m *Manager) Update(ctx context.Context, a *Account) error {
+	logger.Debugf("updating account %d", a.ID)
 	_, err := m.db.ExecContext(ctx, `UPDATE accounts SET name=?, type=?, api_key=?, refresh_token=?, access_token=?, token_expires_at=?, account_id=?, base_url=?, priority=?, exhausted=?, reset_at=? WHERE id=?`,
 		a.Name, a.Type, a.APIKey, a.RefreshToken, a.AccessToken, a.TokenExpiresAt, a.AccountID, a.BaseURL, a.Priority, a.Exhausted, a.ResetAt, a.ID)
-	return err
+	if err != nil {
+		logger.Errorf("update account %d failed: %v", a.ID, err)
+		return err
+	}
+	logger.Infof("updated account %d", a.ID)
+	return nil
 }
 
 // Delete removes an account by id.
@@ -191,18 +205,27 @@ func (m *Manager) Delete(ctx context.Context, id int64) error {
 
 // MarkExhausted marks account exhausted until resetAt.
 func (m *Manager) MarkExhausted(ctx context.Context, id int64, resetAt time.Time) error {
+	logger.Warnf("marking account %d exhausted until %v", id, resetAt)
 	_, err := m.db.ExecContext(ctx, `UPDATE accounts SET exhausted=1, reset_at=? WHERE id=?`, resetAt, id)
+	if err != nil {
+		logger.Errorf("mark account %d exhausted failed: %v", id, err)
+	}
 	return err
 }
 
 // Reactivate clears exhaustion flag.
 func (m *Manager) Reactivate(ctx context.Context, id int64) error {
+	logger.Infof("reactivating account %d", id)
 	_, err := m.db.ExecContext(ctx, `UPDATE accounts SET exhausted=0, reset_at=NULL WHERE id=?`, id)
+	if err != nil {
+		logger.Errorf("reactivate account %d failed: %v", id, err)
+	}
 	return err
 }
 
 // Get retrieves account by id.
 func (m *Manager) Get(ctx context.Context, id int64) (*Account, error) {
+	logger.Debugf("getting account %d", id)
 	row := m.db.QueryRowContext(ctx, `SELECT id, account_id, name, type, api_key, refresh_token, access_token, token_expires_at, base_url, priority, exhausted, reset_at FROM accounts WHERE id=?`, id)
 	var a Account
 	var apiKey, refreshToken, accessToken, accountID, baseURL sql.NullString
@@ -210,8 +233,10 @@ func (m *Manager) Get(ctx context.Context, id int64) (*Account, error) {
 	var resetAt sql.NullTime
 	if err := row.Scan(&a.ID, &accountID, &a.Name, &a.Type, &apiKey, &refreshToken, &accessToken, &tokenExpiresAt, &baseURL, &a.Priority, &a.Exhausted, &resetAt); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			logger.Warnf("account %d not found", id)
 			return nil, nil
 		}
+		logger.Errorf("get account %d failed: %v", id, err)
 		return nil, err
 	}
 	if apiKey.Valid {

@@ -10,6 +10,7 @@ import (
 
 	acct "codex-companion/internal/account"
 	"codex-companion/internal/log"
+	"codex-companion/internal/logger"
 	"codex-companion/internal/scheduler"
 )
 
@@ -34,6 +35,7 @@ func New(s *scheduler.Scheduler, l *log.Store, apiUpstream, chatgptUpstream stri
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	logger.Infof("proxy %s %s", r.Method, r.URL.String())
 	if strings.HasPrefix(r.URL.Path, "/admin") {
 		http.NotFound(w, r)
 		return
@@ -46,6 +48,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !allowed {
+		logger.Warnf("blocked path %s", r.URL.Path)
 		http.NotFound(w, r)
 		return
 	}
@@ -53,8 +56,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// read request body for logging and forwarding
 	var reqBody []byte
 	if r.Body != nil {
-		reqBody, _ = io.ReadAll(r.Body)
-		r.Body.Close()
+		var err error
+		reqBody, err = io.ReadAll(r.Body)
+		if err != nil {
+			logger.Warnf("read request body: %v", err)
+		}
+		if err := r.Body.Close(); err != nil {
+			logger.Warnf("close request body: %v", err)
+		}
 	}
 	origBody := make([]byte, len(reqBody))
 	copy(origBody, reqBody)
@@ -62,9 +71,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for attempts := 0; attempts < 3; attempts++ {
 		account, err := h.Scheduler.Next(ctx)
 		if err != nil {
+			logger.Errorf("no accounts available: %v", err)
 			http.Error(w, "no accounts available", http.StatusServiceUnavailable)
 			return
 		}
+		logger.Debugf("using account %d type %d", account.ID, account.Type)
 
 		base := h.UpstreamAPI
 		path := r.URL.Path
@@ -101,6 +112,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		req, err := http.NewRequestWithContext(ctx, r.Method, upstreamURL, bytes.NewReader(body))
 		if err != nil {
+			logger.Errorf("new upstream request: %v", err)
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
@@ -117,7 +129,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		resp, err := h.Client.Do(req)
 		if err != nil {
-			h.Log.Insert(ctx, &log.RequestLog{
+			logger.Warnf("upstream error: %v", err)
+			if err := h.Log.Insert(ctx, &log.RequestLog{
 				Time:       time.Now(),
 				AccountID:  account.ID,
 				Method:     r.Method,
@@ -129,7 +142,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Status:     0,
 				DurationMs: time.Since(start).Milliseconds(),
 				Error:      err.Error(),
-			})
+			}); err != nil {
+				logger.Errorf("insert log failed: %v", err)
+			}
 			if attempts == 2 {
 				http.Error(w, "upstream error", http.StatusBadGateway)
 				return
@@ -137,11 +152,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		defer resp.Body.Close()
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			logger.Warnf("read response body: %v", err)
+		}
 		duration := time.Since(start)
 
 		// log
-		h.Log.Insert(ctx, &log.RequestLog{
+		if err := h.Log.Insert(ctx, &log.RequestLog{
 			Time:       time.Now(),
 			AccountID:  account.ID,
 			Method:     r.Method,
@@ -154,9 +172,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			RespSize:   len(respBody),
 			Status:     resp.StatusCode,
 			DurationMs: duration.Milliseconds(),
-		})
+		}); err != nil {
+			logger.Errorf("insert log failed: %v", err)
+		}
+
+		logger.Infof("proxied %s via account %d status %d in %dms", r.URL.Path, account.ID, resp.StatusCode, duration.Milliseconds())
 
 		if resp.StatusCode == http.StatusTooManyRequests {
+			logger.Warnf("account %d exhausted", account.ID)
 			h.Scheduler.MarkExhausted(ctx, account.ID, time.Now().Add(time.Hour))
 			if attempts < 2 {
 				continue
@@ -169,7 +192,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		w.WriteHeader(resp.StatusCode)
-		w.Write(respBody)
+		if _, err := w.Write(respBody); err != nil {
+			logger.Errorf("write response: %v", err)
+		}
 		return
 	}
 }
