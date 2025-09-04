@@ -13,15 +13,16 @@ import (
 
 // RequestLog records a proxied request.
 type RequestLog struct {
-	ID         int64
-	Time       time.Time
-	AccountID  int64
-	Method     string
-	URL        string
-	ReqHeader  http.Header
-	ReqBody    string
-	ReqSize    int
-	RespHeader http.Header
+        ID         int64
+        Time       time.Time
+       AccountID  int64
+       AccountName string
+       Method     string
+        URL        string
+        ReqHeader  http.Header
+        ReqBody    string
+        ReqSize    int
+        RespHeader http.Header
 	RespBody   string
 	RespSize   int
 	Status     int

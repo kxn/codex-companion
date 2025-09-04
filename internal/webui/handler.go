@@ -213,17 +213,32 @@ func AdminHandler(am *account.Manager, ls *logpkg.Store) http.Handler {
 			size = 100
 		}
 		offset := (page - 1) * size
-		logs, err := ls.List(ctx, size+1, offset)
-		if err != nil {
-			logger.Errorf("list logs failed: %v", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		hasMore := false
-		if len(logs) > size {
-			hasMore = true
-			logs = logs[:size]
-		}
+               logs, err := ls.List(ctx, size+1, offset)
+               if err != nil {
+                       logger.Errorf("list logs failed: %v", err)
+                       http.Error(w, err.Error(), http.StatusInternalServerError)
+                       return
+               }
+
+               accts, err := am.List(ctx)
+               if err != nil {
+                       logger.Errorf("list accounts failed: %v", err)
+               }
+               nameMap := make(map[int64]string)
+               for _, a := range accts {
+                       nameMap[a.ID] = a.Name
+               }
+               for _, l := range logs {
+                       if name, ok := nameMap[l.AccountID]; ok {
+                               l.AccountName = name
+                       }
+               }
+
+               hasMore := false
+               if len(logs) > size {
+                       hasMore = true
+                       logs = logs[:size]
+               }
 		if err := json.NewEncoder(w).Encode(struct {
 			Logs    []*logpkg.RequestLog `json:"logs"`
 			Page    int                  `json:"page"`
